@@ -1,7 +1,9 @@
 """Main LangGraph agent workflow.
 
 This module defines the complete Market Analyst Agent graph with:
-- Plan-and-Execute architecture (Planner → Executor loop → Reporter)
+- Router for intent classification (deep research vs flash briefing)
+- Plan-and-Execute + ReAct path (thorough analysis)
+- ReWOO path (fast, token-efficient snapshots)
 - PostgreSQL checkpointing for state persistence
 - Human-in-the-loop interrupts for report approval
 """
@@ -17,10 +19,26 @@ from langgraph.checkpoint.postgres import PostgresSaver
 from langgraph.graph import END, START, StateGraph
 
 from market_analyst.memory.profile import load_user_profile
-from market_analyst.nodes.executor import executor_node, should_continue_executing
+from market_analyst.nodes.executor import executor_node
 from market_analyst.nodes.planner import planner_node
 from market_analyst.nodes.reporter import format_report_for_display, reporter_node
-from market_analyst.schemas import AgentState, UserProfile
+from market_analyst.nodes.rewoo_planner import rewoo_planner_node
+from market_analyst.nodes.rewoo_solver import rewoo_solver_node
+from market_analyst.nodes.rewoo_worker import rewoo_worker_node
+from market_analyst.nodes.router import router_node
+from market_analyst.schemas import AgentState, ExecutionMode
+
+
+def route_after_router(state: AgentState) -> Literal["planner", "rewoo_planner"]:
+    """Route based on execution mode set by router.
+
+    Routes to:
+    - planner: For deep research (Plan-and-Execute + ReAct)
+    - rewoo_planner: For flash briefing (ReWOO)
+    """
+    if state.execution_mode == ExecutionMode.FLASH_BRIEFING:
+        return "rewoo_planner"
+    return "planner"
 
 
 def route_after_executor(state: AgentState) -> Literal["executor", "reporter"]:
@@ -34,21 +52,23 @@ def route_after_executor(state: AgentState) -> Literal["executor", "reporter"]:
     return "executor"
 
 
-def create_graph(checkpointer: PostgresSaver | None = None) -> StateGraph:
+def create_graph(
+    checkpointer: PostgresSaver | None = None,
+    force_mode: ExecutionMode | None = None,
+) -> StateGraph:
     """Create the Market Analyst Agent graph.
 
     Graph Structure:
     ```
-    START → planner → executor ─┬─→ executor (loop while steps remain)
-                                └─→ reporter → [INTERRUPT] → END
+    START → router ─┬─→ planner → executor ─┬─→ executor (loop)
+                    │                       └─→ reporter ──────────┐
+                    │                                              ├─→ publish → END
+                    └─→ rewoo_planner → rewoo_worker → rewoo_solver─┘
     ```
-
-    The graph uses interrupt_before on the "publish" node to implement
-    human-in-the-loop approval for the generated report.
 
     Args:
         checkpointer: Optional PostgresSaver for state persistence.
-                     If provided, enables pause/resume functionality.
+        force_mode: Optional mode override (bypasses router classification).
 
     Returns:
         Compiled StateGraph ready for invocation
@@ -56,17 +76,39 @@ def create_graph(checkpointer: PostgresSaver | None = None) -> StateGraph:
     # Build the graph
     builder = StateGraph(AgentState)
 
-    # Add nodes
+    # Add all nodes
+    # Router (entry point)
+    builder.add_node("router", router_node)
+
+    # Deep Research path (Plan-and-Execute + ReAct)
     builder.add_node("planner", planner_node)
     builder.add_node("executor", executor_node)
     builder.add_node("reporter", reporter_node)
+
+    # Flash Briefing path (ReWOO)
+    builder.add_node("rewoo_planner", rewoo_planner_node)
+    builder.add_node("rewoo_worker", rewoo_worker_node)
+    builder.add_node("rewoo_solver", rewoo_solver_node)
+
+    # Publish (shared by both paths)
     builder.add_node("publish", publish_node)
 
     # Define edges
-    builder.add_edge(START, "planner")
-    builder.add_edge("planner", "executor")
+    # Entry: Router classifies intent
+    builder.add_edge(START, "router")
 
-    # Executor loops or moves to reporter
+    # Router branches to appropriate path
+    builder.add_conditional_edges(
+        "router",
+        route_after_router,
+        {
+            "planner": "planner",
+            "rewoo_planner": "rewoo_planner",
+        },
+    )
+
+    # Deep Research path: planner → executor (loop) → reporter → publish
+    builder.add_edge("planner", "executor")
     builder.add_conditional_edges(
         "executor",
         route_after_executor,
@@ -75,8 +117,14 @@ def create_graph(checkpointer: PostgresSaver | None = None) -> StateGraph:
             "reporter": "reporter",
         },
     )
-
     builder.add_edge("reporter", "publish")
+
+    # Flash Briefing path: rewoo_planner → rewoo_worker → rewoo_solver → publish
+    builder.add_edge("rewoo_planner", "rewoo_worker")
+    builder.add_edge("rewoo_worker", "rewoo_solver")
+    builder.add_edge("rewoo_solver", "publish")
+
+    # End
     builder.add_edge("publish", END)
 
     # Compile with checkpointer and interrupt
@@ -103,10 +151,13 @@ def publish_node(state: AgentState) -> dict:
     reports_dir = Path("reports")
     reports_dir.mkdir(exist_ok=True)
 
-    # Generate filename with ticker and timestamp
+    # Generate filename with ticker, mode, and timestamp
     report = state.draft_report
+    mode_suffix = (
+        "flash" if state.execution_mode == ExecutionMode.FLASH_BRIEFING else "deep"
+    )
     timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
-    filename = f"{report.ticker}_{timestamp}.md"
+    filename = f"{report.ticker}_{mode_suffix}_{timestamp}.md"
     filepath = reports_dir / filename
 
     # Format report as markdown
@@ -115,6 +166,7 @@ def publish_node(state: AgentState) -> dict:
     content = f"""# {report.title}
 
 **Ticker:** {report.ticker}  
+**Mode:** {mode_suffix.capitalize()} {"(ReWOO)" if mode_suffix == "flash" else "(ReAct)"}  
 **Recommendation:** {report.recommendation.upper().replace("_", " ")}  
 **Confidence:** {report.confidence:.0%}  
 **Generated:** {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
@@ -152,6 +204,7 @@ def run_analysis(
     user_id: str = "default",
     thread_id: str | None = None,
     checkpointer: PostgresSaver | None = None,
+    force_mode: ExecutionMode | None = None,
 ) -> dict:
     """Run a complete stock analysis.
 
@@ -162,6 +215,7 @@ def run_analysis(
         user_id: User identifier for profile lookup
         thread_id: Optional thread ID for resuming a conversation
         checkpointer: Optional checkpointer for persistence
+        force_mode: Optional execution mode override
 
     Returns:
         Final state with draft report
@@ -174,10 +228,11 @@ def run_analysis(
         messages=[HumanMessage(content=query)],
         user_profile=user_profile,
         user_id=user_id,
+        execution_mode=force_mode,  # Will be overwritten by router if None
     )
 
     # Create graph
-    graph = create_graph(checkpointer=checkpointer)
+    graph = create_graph(checkpointer=checkpointer, force_mode=force_mode)
 
     # Configure thread
     thread_id = thread_id or str(uuid.uuid4())
@@ -190,6 +245,7 @@ def run_analysis(
         "thread_id": thread_id,
         "state": result,
         "draft_report": result.get("draft_report"),
+        "execution_mode": result.get("execution_mode"),
         "requires_approval": not result.get("report_approved", False),
     }
 

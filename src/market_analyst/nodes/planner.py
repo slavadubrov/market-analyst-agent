@@ -1,8 +1,8 @@
 """Planner node for the Plan-and-Execute architecture.
 
 The planner breaks down user requests into a sequence of research steps.
-This demonstrates the ReWOO-style "plan upfront" pattern, which is more
-token-efficient than pure ReAct for structured tasks.
+This adheres to the Plan-and-Execute pattern, where high-level steps are
+generated first, and then executed by a ReAct agent.
 """
 
 import os

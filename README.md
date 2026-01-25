@@ -18,8 +18,10 @@ This project showcases how to build a sophisticated AI agent that can research s
 
 ## Features
 
-- 🧠 **Plan-and-Execute Architecture**: Breaks down research into structured steps
-- 🔄 **ReAct Execution**: Thought-Action-Observation loop for each step
+- 🔀 **Smart Router**: Automatically classifies requests as deep research or quick snapshot
+- 🧠 **Plan-and-Execute Architecture**: Breaks down research into structured steps (deep mode)
+- 🔄 **ReAct Execution**: Thought-Action-Observation loop for thorough analysis
+- ⚡ **ReWOO Mode**: Fast, token-efficient snapshots with parallel tool execution
 - 💾 **PostgreSQL Checkpointing**: Pause and resume mid-analysis
 - 🧑‍💼 **User Profiles**: Redis-backed long-term memory for preferences
 - ✋ **Human-in-the-Loop**: Approval required before publishing reports
@@ -207,6 +209,27 @@ uv run python -m market_analyst.cli "Analyze NVDA stock" --model haiku
 uv run python -m market_analyst.cli "Analyze NVDA stock" --model sonnet
 ```
 
+### Execution Mode Selection
+
+Choose between analysis modes:
+
+```bash
+# Auto mode (default) - Router classifies your intent automatically
+uv run python -m market_analyst.cli "Analyze NVDA stock"
+
+# Force Deep Research mode (ReAct) - Thorough, multi-step analysis
+uv run python -m market_analyst.cli "Quick NVDA update" --mode deep
+
+# Force Flash Briefing mode (ReWOO) - Fast, token-efficient snapshot
+uv run python -m market_analyst.cli "Analyze NVDA risks" --mode flash
+```
+
+**When to use each mode:**
+
+- **Auto**: Let the router decide based on your query keywords
+- **Deep**: For comprehensive reports requiring multi-source synthesis
+- **Flash**: For quick market updates when speed matters
+
 ### Using Docker (All-in-One)
 
 Run everything in containers:
@@ -269,31 +292,47 @@ uv run market-analyst --approve --thread-id <thread-id>
 
 ## Architecture
 
+The agent uses a **Router** to classify user intent and dispatch to the appropriate execution path:
+
 ```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│   Planner   │────▶│  Executor   │────▶│  Reporter   │
-│             │     │  (ReAct)    │     │             │
-└─────────────┘     └──────┬──────┘     └──────┬──────┘
-                           │                    │
-                           ▼                    ▼
-                     ┌───────────┐        ┌───────────┐
-                     │   Tools   │        │   HITL    │
-                     │ (YFinance │        │ (Approval)│
-                     │  Tavily)  │        └───────────┘
-                     └───────────┘
-                           │
-                           ▼
-              ┌────────────────────────┐
-              │     PostgreSQL         │
-              │   (Checkpointing)      │
-              └────────────────────────┘
-                           │
-                           ▼
-              ┌────────────────────────┐
-              │        Redis           │
-              │   (User Profiles)      │
-              └────────────────────────┘
+                              ┌─────────────────────────────────────────────────┐
+                              │            DEEP RESEARCH (ReAct)                │
+                              │  ┌─────────┐   ┌──────────┐   ┌──────────┐     │
+                         ┌───▶│  │ Planner │──▶│ Executor │──▶│ Reporter │─────┼──┐
+                         │    │  └─────────┘   └────┬─────┘   └──────────┘     │  │
+┌─────────┐   ┌────────┐ │    │                     │ loop                     │  │
+│  START  │──▶│ Router │─┤    └─────────────────────┼─────────────────────────┘  │
+└─────────┘   └────────┘ │                          ▼                            │
+                         │                    ┌───────────┐                      │
+                         │                    │   Tools   │                      │
+                         │                    └───────────┘                      ▼
+                         │    ┌─────────────────────────────────────────┐   ┌─────────┐
+                         │    │          FLASH BRIEFING (ReWOO)         │   │ Publish │──▶ END
+                         │    │  ┌─────────┐  ┌────────┐  ┌────────┐   │   └─────────┘
+                         └───▶│  │ Planner │─▶│ Worker │─▶│ Solver │───┼──────▲
+                              │  └─────────┘  └───┬────┘  └────────┘   │      │
+                              │                   │ parallel           │      │
+                              └───────────────────┼────────────────────┘      │
+                                                  ▼                           │
+                                             ┌───────────┐                    │
+                                             │   Tools   │                HITL Approval
+                                             └───────────┘
 ```
+
+**Key Difference:**
+
+- **ReAct** (Deep): LLM thinks → calls tool → waits → thinks → calls tool → waits... (flexible but expensive)
+- **ReWOO** (Flash): LLM plans all tools → executes in parallel → synthesizes once (fast and token-efficient)
+
+### Deep Dive: Planner vs. ReWOO Planner
+
+| Feature | **Planner** (Deep Path) | **ReWOO Planner** (Flash Path) |
+| :--- | :--- | :--- |
+| **Node File** | `nodes/planner.py` | `nodes/rewoo_planner.py` |
+| **Output Type** | Text descriptions of steps | Specific tool calls with variables (`#E1`) |
+| **Execution** | Steps executed by a smart **ReAct Loop** | Tool calls executed by a dumb **Worker** |
+| **Parallelism** | Sequential (step-by-step) | **Parallel** (async execution) |
+| **Best For** | "Find the CEO's latest interview" | "Get price, news, and metrics" |
 
 ---
 
@@ -303,7 +342,7 @@ This project demonstrates concepts from each part of the blog series:
 
 | Blog Post | Demo Feature |
 |-----------|--------------|
-| Part 1: Cognitive Engine | Plan-and-Execute + ReAct in `nodes/` |
+| Part 1: Cognitive Engine | **Router** + ReAct (deep) + ReWOO (flash) in `nodes/` |
 | Part 2: The Cortex | PostgreSQL checkpointing + Redis profiles |
 | Part 3: Tool Ergonomics | Pydantic-validated tools in `tools/` |
 | Part 4: Human-in-the-Loop | `interrupt_before` on report publishing |

@@ -1,9 +1,17 @@
 """Pydantic models and state schemas for the Market Analyst Agent."""
 
+from enum import Enum
 from typing import Annotated, Literal
 
 from langgraph.graph.message import add_messages
 from pydantic import BaseModel, Field
+
+
+class ExecutionMode(str, Enum):
+    """Execution mode for the agent."""
+
+    DEEP_RESEARCH = "deep_research"  # Plan-and-Execute + ReAct (thorough)
+    FLASH_BRIEFING = "flash_briefing"  # ReWOO (fast, token-efficient)
 
 
 class UserProfile(BaseModel):
@@ -19,6 +27,27 @@ class UserProfile(BaseModel):
         default_factory=list, description="Preferred industry sectors"
     )
     notes: str = Field(default="", description="Additional user notes/preferences")
+
+
+class ReWOOPlanStep(BaseModel):
+    """A step in the ReWOO plan with variable placeholders.
+
+    ReWOO plans all tool calls upfront with variable references (e.g., #E1, #E2).
+    This allows parallel execution without intermediate LLM calls.
+    """
+
+    step_id: str = Field(description="Variable ID, e.g., '#E1'")
+    description: str = Field(description="What this step accomplishes")
+    tool_name: str = Field(description="Tool to call (required)")
+    tool_args: dict = Field(
+        default_factory=dict,
+        description="Tool arguments, may contain variable refs like '#E1'",
+    )
+    depends_on: list[str] = Field(
+        default_factory=list,
+        description="List of step_ids this step depends on",
+    )
+    result: str | None = Field(default=None, description="Tool execution result")
 
 
 class PlanStep(BaseModel):
@@ -68,9 +97,15 @@ class AgentState(BaseModel):
     # Message history with LangGraph's add_messages reducer
     messages: Annotated[list, add_messages] = Field(default_factory=list)
 
-    # Plan-and-Execute state
+    # Execution mode (set by router)
+    execution_mode: ExecutionMode | None = None
+
+    # Plan-and-Execute state (for DEEP_RESEARCH mode)
     plan: list[PlanStep] = Field(default_factory=list)
     current_step_index: int = 0
+
+    # ReWOO state (for FLASH_BRIEFING mode)
+    rewoo_plan: list[ReWOOPlanStep] = Field(default_factory=list)
 
     # Research results
     research_data: ResearchData | None = None

@@ -17,7 +17,7 @@ from market_analyst.constants import DEFAULT_MODEL_KEY, MODEL_ENV_VAR, MODEL_MAP
 from market_analyst.memory.checkpointer import get_checkpointer
 from market_analyst.memory.profile import get_profile_store
 from market_analyst.nodes.reporter import format_report_for_display
-from market_analyst.schemas import UserProfile
+from market_analyst.schemas import ExecutionMode, UserProfile
 
 
 def main():
@@ -80,6 +80,12 @@ Examples:
         choices=list(MODEL_MAP.keys()),
         default=DEFAULT_MODEL_KEY,
         help="Model to use: 'sonnet' (powerful, slower) or 'haiku' (fast, cheaper)",
+    )
+    parser.add_argument(
+        "--mode",
+        choices=["auto", "deep", "flash"],
+        default="auto",
+        help="Execution mode: 'auto' (router decides), 'deep' (ReAct - thorough), 'flash' (ReWOO - fast)",
     )
 
     # Debugging
@@ -179,12 +185,24 @@ def run_new_analysis(args):
     os.environ[MODEL_ENV_VAR] = MODEL_MAP[args.model]
     print(f"   🤖 Using model: {args.model}")
 
+    # Map CLI mode arg to ExecutionMode
+    force_mode = None
+    if args.mode == "deep":
+        force_mode = ExecutionMode.DEEP_RESEARCH
+        print("   📊 Mode: Deep Research (ReAct) - forced")
+    elif args.mode == "flash":
+        force_mode = ExecutionMode.FLASH_BRIEFING
+        print("   ⚡ Mode: Flash Briefing (ReWOO) - forced")
+    else:
+        print("   🔀 Mode: Auto (router will classify intent)")
+
     try:
         result = run_analysis(
             query=args.query,
             user_id=args.user_id,
             thread_id=thread_id,
             checkpointer=checkpointer,
+            force_mode=force_mode,
         )
 
         if args.show_plan:

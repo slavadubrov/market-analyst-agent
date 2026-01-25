@@ -24,7 +24,10 @@ wheels/
 .venv/
 venv/
 ENV/
+
+# local directories
 tmp/
+reports/
 
 # Environment files
 .env
