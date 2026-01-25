@@ -1,0 +1,60 @@
+services:
+  # PostgreSQL for checkpoint persistence
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: market_analyst
+      POSTGRES_USER: analyst
+      POSTGRES_PASSWORD: analyst_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U analyst -d market_analyst"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Redis for user profile memory
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Market Analyst Agent application
+  app:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - TAVILY_API_KEY=${TAVILY_API_KEY}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=market_analyst
+      - POSTGRES_USER=analyst
+      - POSTGRES_PASSWORD=analyst_pass
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # Keep container running for interactive use
+    stdin_open: true
+    tty: true
+    # Override for one-shot analysis:
+    # command: ["python", "-m", "market_analyst.cli", "Analyze NVDA stock"]
+
+volumes:
+  postgres_data:
+  redis_data:
