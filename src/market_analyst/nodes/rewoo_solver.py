@@ -29,12 +29,8 @@ class FlashBriefingOutput(BaseModel):
     title: str = Field(description="Briefing title")
     summary: str = Field(description="2-3 sentence executive summary")
     analysis: str = Field(description="Key findings from the data, 3-5 bullet points")
-    recommendation: str = Field(
-        description="One of: strong_buy, buy, hold, sell, strong_sell"
-    )
-    confidence: float = Field(
-        ge=0.0, le=1.0, description="Confidence in recommendation"
-    )
+    recommendation: str = Field(description="One of: strong_buy, buy, hold, sell, strong_sell")
+    confidence: float = Field(ge=0.0, le=1.0, description="Confidence in recommendation")
     risk_factors: list[str] = Field(description="Top 2-3 risk factors")
 
 
@@ -74,12 +70,8 @@ def rewoo_solver_node(state: AgentState) -> dict:
     # Get original query for context
     user_messages = [m for m in state.messages if isinstance(m, HumanMessage)]
     if not user_messages:
-        user_messages = [
-            m for m in state.messages if hasattr(m, "type") and m.type == "human"
-        ]
-    query = (
-        user_messages[-1].content if user_messages else f"Quick analysis of {ticker}"
-    )
+        user_messages = [m for m in state.messages if hasattr(m, "type") and m.type == "human"]
+    query = user_messages[-1].content if user_messages else f"Quick analysis of {ticker}"
 
     messages = [
         SystemMessage(content=REWOO_SOLVER_PROMPT),

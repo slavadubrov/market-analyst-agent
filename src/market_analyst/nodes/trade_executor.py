@@ -41,7 +41,7 @@ def trade_executor_node(state: AgentState) -> dict:
         return {"error": "Trade not approved"}
 
     # Simulate trade execution
-    print(f"\n💰 Executing Trade:")
+    print("\n💰 Executing Trade:")
     print(f"   Action: {trade.action.value.upper()}")
     print(f"   Ticker: {trade.ticker}")
     print(f"   Amount: ${trade.amount_usd:,.2f}")
@@ -50,7 +50,7 @@ def trade_executor_node(state: AgentState) -> dict:
     # For demo purposes, we just simulate success
     execution_id = f"TXN-{trade.ticker}-{int(trade.amount_usd)}"
 
-    print(f"\n   ✅ Trade executed successfully!")
+    print("\n   ✅ Trade executed successfully!")
     print(f"   Execution ID: {execution_id}")
 
     return {

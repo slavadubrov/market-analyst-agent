@@ -71,9 +71,7 @@ def get_thread_state(thread_id: str, checkpointer: BaseCheckpointSaver) -> dict 
         return None
 
 
-def list_thread_history(
-    thread_id: str, checkpointer: BaseCheckpointSaver, limit: int = 10
-) -> list:
+def list_thread_history(thread_id: str, checkpointer: BaseCheckpointSaver, limit: int = 10) -> list:
     """List checkpoint history for a thread.
 
     Enables "time travel" by listing all saved states.

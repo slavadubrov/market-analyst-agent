@@ -52,22 +52,14 @@ def router_node(state: AgentState) -> dict:
     # Check for explicit mode override in state (set by CLI --mode flag)
     # If already set, skip LLM classification to save tokens
     if state.execution_mode is not None:
-        mode_emoji = (
-            "⚡" if state.execution_mode == ExecutionMode.FLASH_BRIEFING else "🔬"
-        )
-        mode_name = (
-            "Flash Briefing (ReWOO)"
-            if state.execution_mode == ExecutionMode.FLASH_BRIEFING
-            else "Deep Research (ReAct)"
-        )
+        mode_emoji = "⚡" if state.execution_mode == ExecutionMode.FLASH_BRIEFING else "🔬"
+        mode_name = "Flash Briefing (ReWOO)" if state.execution_mode == ExecutionMode.FLASH_BRIEFING else "Deep Research (ReAct)"
         print(f"\n{mode_emoji} Mode: {mode_name} (forced via CLI)")
 
         # Still need to extract ticker from query
         user_messages = [m for m in state.messages if isinstance(m, HumanMessage)]
         if not user_messages:
-            user_messages = [
-                m for m in state.messages if hasattr(m, "type") and m.type == "human"
-            ]
+            user_messages = [m for m in state.messages if hasattr(m, "type") and m.type == "human"]
         query = user_messages[-1].content if user_messages else ""
 
         # Simple ticker extraction (look for uppercase 1-5 letter words)
@@ -92,9 +84,7 @@ def router_node(state: AgentState) -> dict:
     # Get the user's query
     user_messages = [m for m in state.messages if isinstance(m, HumanMessage)]
     if not user_messages:
-        user_messages = [
-            m for m in state.messages if hasattr(m, "type") and m.type == "human"
-        ]
+        user_messages = [m for m in state.messages if hasattr(m, "type") and m.type == "human"]
 
     query = user_messages[-1].content if user_messages else "Analyze the market"
 
@@ -107,11 +97,7 @@ def router_node(state: AgentState) -> dict:
         result: RouterOutput = structured_llm.invoke(messages)
 
         mode_emoji = "⚡" if result.mode == ExecutionMode.FLASH_BRIEFING else "🔬"
-        mode_name = (
-            "Flash Briefing (ReWOO)"
-            if result.mode == ExecutionMode.FLASH_BRIEFING
-            else "Deep Research (ReAct)"
-        )
+        mode_name = "Flash Briefing (ReWOO)" if result.mode == ExecutionMode.FLASH_BRIEFING else "Deep Research (ReAct)"
 
         print(f"\n{mode_emoji} Mode: {mode_name}")
         print(f"   Ticker: {result.ticker}")

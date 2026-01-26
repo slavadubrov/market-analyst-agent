@@ -14,6 +14,7 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "psycopg[binary]>=3.2.0",
     "langgraph-checkpoint-redis>=0.3.3",
+    "qdrant-client>=1.16.2",
 ]
 
 [project.scripts]
@@ -28,5 +29,23 @@ packages = ["src/market_analyst"]
 
 [dependency-groups]
 dev = [
+    "mypy>=1.19.1",
     "pytest>=9.0.2",
+    "pytest-mock>=3.15.1",
+    "ruff>=0.14.14",
 ]
+
+[tool.ruff]
+line-length = 160
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+# E: pycodestyle errors
+# F: pyflakes
+# I: isort
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+ignore_missing_imports = true

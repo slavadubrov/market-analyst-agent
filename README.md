@@ -61,15 +61,35 @@ You'll need two API keys to run this project:
 
 > **Note**: Tavily's free tier includes 1,000 API calls/month—plenty for development.
 
-### Step 2: Install Dependencies
+### Step 2: Development Setup (Makefile)
+
+The project includes a `Makefile` to streamline development tasks.
 
 ```bash
-# Clone and enter the directory
-cd market-analyst-agent
+# Setup virtual environment and install dependencies
+make setup
+make install
 
-# Install dependencies with uv
-uv sync
+# Run tests
+make test
+
+# Format code (ruff)
+make format
+
+# Lint code (ruff)
+make lint
+
+# Start Databases (Postgres, Qdrant, Redis)
+make db-up
+
+# Stop Databases
+make db-down
+
+# Clean up environment (remove virtual environment, caches, stop containers)
+make clean
 ```
+
+If you don't have `make` installed, you can run the commands directly using `uv` or `docker compose` (see Makefile for details).
 
 ### Step 3: Configure Environment Variables
 

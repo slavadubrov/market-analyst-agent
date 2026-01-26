@@ -87,7 +87,7 @@ def guardian_node(state: AgentState) -> dict:
         return {}
 
     # Display the trade being evaluated
-    print(f"\n🛡️  Guardian: Evaluating trade request")
+    print("\n🛡️  Guardian: Evaluating trade request")
     print(f"   Action: {trade.action.value.upper()}")
     print(f"   Ticker: {trade.ticker}")
     print(f"   Amount: ${trade.amount_usd:,.2f}")
@@ -103,7 +103,7 @@ def guardian_node(state: AgentState) -> dict:
     elif result.decision == GuardianDecision.ESCALATE:
         print(f"\n   ⏸️  ESCALATED: {result.reason}")
         print(f"      Policy: {result.policy_name}")
-        print(f"      → Requires human approval")
+        print("      → Requires human approval")
     else:  # APPROVE
         print(f"\n   ✅ AUTO-APPROVED: {result.reason}")
         print(f"      Policy: {result.policy_name}")

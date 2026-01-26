@@ -199,9 +199,7 @@ def approve_trade(
     if not approve:
         # Reject the trade
         print("\n❌ Trade rejected by human reviewer")
-        graph.update_state(
-            config, {"trade_approved": False, "error": "Rejected by reviewer"}
-        )
+        graph.update_state(config, {"trade_approved": False, "error": "Rejected by reviewer"})
         return {"thread_id": thread_id, "executed": False, "rejected": True}
 
     # Apply modifications if any

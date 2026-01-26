@@ -42,7 +42,6 @@ from market_analyst.nodes.router import router_node
 from market_analyst.nodes.trade_executor import trade_executor_node
 from market_analyst.schemas import (
     AgentState,
-    DraftReport,
     ExecutionMode,
     GuardianDecision,
     TradeAction,
@@ -101,7 +100,7 @@ def create_trade_from_report_node(state: AgentState) -> dict:
         reason=f"Based on analysis: {report.summary[:200]}...",
     )
 
-    print(f"\n📈 Creating trade from report:")
+    print("\n📈 Creating trade from report:")
     print(f"   Recommendation: {recommendation.upper()}")
     print(f"   Action: {action.value.upper()} {report.ticker}")
     print(f"   Amount: ${trade_amount:,.2f}")
@@ -133,9 +132,7 @@ def publish_node(state: AgentState) -> dict:
 
     # Generate filename
     report = state.draft_report
-    mode_suffix = (
-        "flash" if state.execution_mode == ExecutionMode.FLASH_BRIEFING else "deep"
-    )
+    mode_suffix = "flash" if state.execution_mode == ExecutionMode.FLASH_BRIEFING else "deep"
     timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
     filename = f"{report.ticker}_{mode_suffix}_{timestamp}.md"
     filepath = reports_dir / filename
@@ -457,9 +454,7 @@ def approve_combined_trade(
 
     if not approve:
         print("\n❌ Trade rejected by human reviewer")
-        graph.update_state(
-            config, {"trade_approved": False, "error": "Rejected by reviewer"}
-        )
+        graph.update_state(config, {"trade_approved": False, "error": "Rejected by reviewer"})
         return {"thread_id": thread_id, "executed": False, "rejected": True}
 
     # Apply modifications if any

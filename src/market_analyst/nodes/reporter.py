@@ -57,9 +57,7 @@ def reporter_node(state: AgentState) -> dict:
     research_summary = ""
     for step in state.plan:
         if step.completed and step.result:
-            research_summary += (
-                f"\n### Step {step.step_number}: {step.description}\n{step.result}\n"
-            )
+            research_summary += f"\n### Step {step.step_number}: {step.description}\n{step.result}\n"
 
     # User profile context
     profile_context = ""
@@ -111,11 +109,7 @@ def format_report_for_display(report: DraftReport) -> str:
     if not report:
         return "No report generated."
 
-    risk_factors = (
-        "\n".join(f"  - {r}" for r in report.risk_factors)
-        if report.risk_factors
-        else "  None identified"
-    )
+    risk_factors = "\n".join(f"  - {r}" for r in report.risk_factors) if report.risk_factors else "  None identified"
 
     return f"""
 ╔══════════════════════════════════════════════════════════════════╗

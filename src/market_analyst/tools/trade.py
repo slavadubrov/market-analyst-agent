@@ -17,9 +17,7 @@ class TradeInput(BaseModel):
     the agent provides well-formed requests.
     """
 
-    action: str = Field(
-        description="Trade action: 'buy', 'sell', 'delete_portfolio', or 'delete_logs'"
-    )
+    action: str = Field(description="Trade action: 'buy', 'sell', 'delete_portfolio', or 'delete_logs'")
     ticker: str = Field(description="Stock ticker symbol (e.g., 'NVDA', 'AAPL')")
     amount_usd: float = Field(ge=0, description="Trade amount in USD")
     reason: str = Field(description="Reasoning for the trade decision")

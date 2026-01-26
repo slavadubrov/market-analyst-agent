@@ -73,9 +73,7 @@ def executor_node(state: AgentState) -> dict:
     previous_context = ""
     for i, step in enumerate(state.plan[: state.current_step_index]):
         if step.result:
-            previous_context += (
-                f"\nStep {step.step_number} ({step.description}): {step.result}\n"
-            )
+            previous_context += f"\nStep {step.step_number} ({step.description}): {step.result}\n"
 
     # Create the ReAct agent for this step
     model_name = os.getenv(MODEL_ENV_VAR, DEFAULT_MODEL)
@@ -103,9 +101,7 @@ Previous research findings:
 Complete this step and summarize your findings concisely."""
 
     # Progress indicator
-    print(
-        f"\n🔄 Executing step {current_step.step_number}/{len(state.plan)}: {current_step.description}"
-    )
+    print(f"\n🔄 Executing step {current_step.step_number}/{len(state.plan)}: {current_step.description}")
 
     # Run the ReAct agent
     try:
@@ -120,11 +116,7 @@ Complete this step and summarize your findings concisely."""
 
         # Extract the final response
         final_message = result["messages"][-1]
-        step_result = (
-            final_message.content
-            if hasattr(final_message, "content")
-            else str(final_message)
-        )
+        step_result = final_message.content if hasattr(final_message, "content") else str(final_message)
 
         # Update the step with its result
         updated_plan = list(state.plan)
@@ -147,9 +139,7 @@ Complete this step and summarize your findings concisely."""
                         # Store raw results for later synthesis
                         if research_data.raw_data is None:
                             research_data.raw_data = {}
-                        research_data.raw_data[f"step_{current_step.step_number}"] = (
-                            step_result
-                        )
+                        research_data.raw_data[f"step_{current_step.step_number}"] = step_result
 
         print(f"   ✅ Step {current_step.step_number} complete")
 
@@ -157,11 +147,7 @@ Complete this step and summarize your findings concisely."""
             "plan": updated_plan,
             "current_step_index": state.current_step_index + 1,
             "research_data": research_data,
-            "messages": [
-                AIMessage(
-                    content=f"Completed step {current_step.step_number}: {step_result[:200]}..."
-                )
-            ],
+            "messages": [AIMessage(content=f"Completed step {current_step.step_number}: {step_result[:200]}...")],
         }
 
     except Exception as e:

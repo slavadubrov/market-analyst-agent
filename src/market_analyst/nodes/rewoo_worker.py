@@ -4,9 +4,7 @@ Executes the planned tool calls in parallel (or with dependency ordering).
 This is where the token efficiency comes from - NO LLM calls between tool executions.
 """
 
-import asyncio
 import concurrent.futures
-from typing import Any
 
 from market_analyst.schemas import AgentState, ReWOOPlanStep
 from market_analyst.tools.search import search_competitors, search_news
@@ -88,15 +86,10 @@ def rewoo_worker_node(state: AgentState) -> dict:
 
     # Execute independent steps in parallel using ThreadPoolExecutor
     if independent_steps:
-        print(
-            f"   ⚡ Executing {len(independent_steps)} independent tools in parallel..."
-        )
+        print(f"   ⚡ Executing {len(independent_steps)} independent tools in parallel...")
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
-            future_to_step = {
-                executor.submit(execute_tool, step, results): step
-                for step in independent_steps
-            }
+            future_to_step = {executor.submit(execute_tool, step, results): step for step in independent_steps}
 
             for future in concurrent.futures.as_completed(future_to_step):
                 step = future_to_step[future]
@@ -111,9 +104,7 @@ def rewoo_worker_node(state: AgentState) -> dict:
                         tool_name=step.tool_name,
                         tool_args=step.tool_args,
                         depends_on=step.depends_on,
-                        result=result[:500]
-                        if len(result) > 500
-                        else result,  # Truncate for display
+                        result=result[:500] if len(result) > 500 else result,  # Truncate for display
                     )
                     updated_steps.append(updated_step)
                     print(f"   ✅ {step.step_id}: {step.tool_name} complete")

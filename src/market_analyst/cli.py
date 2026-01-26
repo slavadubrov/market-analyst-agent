@@ -23,7 +23,6 @@ from market_analyst.workflows.analysis_workflow import (
 )
 from market_analyst.workflows.combined_workflow import (
     approve_combined_report,
-    approve_combined_trade,
     run_combined_analysis,
 )
 from market_analyst.workflows.trade_workflow import approve_trade, run_trade
@@ -53,37 +52,23 @@ Examples:
     )
 
     # Main arguments
-    parser.add_argument(
-        "query", nargs="?", help="Stock analysis query (e.g., 'Analyze NVDA')"
-    )
+    parser.add_argument("query", nargs="?", help="Stock analysis query (e.g., 'Analyze NVDA')")
     parser.add_argument("--thread-id", help="Thread ID for resuming a conversation")
-    parser.add_argument(
-        "--user-id", default="default", help="User ID for profile management"
-    )
+    parser.add_argument("--user-id", default="default", help="User ID for profile management")
 
     # Profile management
-    parser.add_argument(
-        "--set-profile", action="store_true", help="Set user profile preferences"
-    )
+    parser.add_argument("--set-profile", action="store_true", help="Set user profile preferences")
     parser.add_argument(
         "--risk-tolerance",
         choices=["conservative", "moderate", "aggressive"],
         help="Risk tolerance level",
     )
-    parser.add_argument(
-        "--horizon", choices=["short", "medium", "long"], help="Investment time horizon"
-    )
+    parser.add_argument("--horizon", choices=["short", "medium", "long"], help="Investment time horizon")
 
     # Execution modes
-    parser.add_argument(
-        "--resume", action="store_true", help="Resume a paused analysis"
-    )
-    parser.add_argument(
-        "--approve", action="store_true", help="Approve the draft report and publish"
-    )
-    parser.add_argument(
-        "--no-persist", action="store_true", help="Run without database persistence"
-    )
+    parser.add_argument("--resume", action="store_true", help="Resume a paused analysis")
+    parser.add_argument("--approve", action="store_true", help="Approve the draft report and publish")
+    parser.add_argument("--no-persist", action="store_true", help="Run without database persistence")
     parser.add_argument(
         "--model",
         choices=list(MODEL_MAP.keys()),
@@ -152,9 +137,7 @@ Examples:
     )
 
     # Debugging
-    parser.add_argument(
-        "--verbose", "-v", action="store_true", help="Enable verbose output"
-    )
+    parser.add_argument("--verbose", "-v", action="store_true", help="Enable verbose output")
     parser.add_argument(
         "--show-plan",
         action="store_true",
@@ -313,9 +296,7 @@ def run_new_analysis(args):
                 print("\nTo approve and publish:")
                 print(f"  uv run market-analyst --approve --thread-id {thread_id}")
                 print("\nTo edit and approve:")
-                print(
-                    f"  uv run market-analyst --approve --thread-id {thread_id} --edit-recommendation hold"
-                )
+                print(f"  uv run market-analyst --approve --thread-id {thread_id} --edit-recommendation hold")
         else:
             print("\n✅ Analysis complete!")
             if result.get("draft_report"):
@@ -372,30 +353,73 @@ def approve_report(args):
     try:
         checkpointer = get_checkpointer()
 
-        result = approve_and_publish(
-            thread_id=args.thread_id,
-            checkpointer=checkpointer,
-        )
+        if args.combined:
+            # Combined workflow: Approve report and continue to trade
+            result = approve_combined_report(
+                thread_id=args.thread_id,
+                checkpointer=checkpointer,
+            )
 
-        if result.get("published"):
-            print("\n🎉 Report published successfully!")
+            if result.get("published") or result.get("state", {}).get("report_approved"):
+                print("\n🎉 Report published successfully!")
 
-            # Display the final report
-            state = result.get("state", {})
-            # Handle both dict and object access
-            if hasattr(state, "draft_report"):
-                draft_report = state.draft_report
-            elif isinstance(state, dict):
-                draft_report = state.get("draft_report")
+            # Check for next steps in combined workflow
+            if result.get("requires_trade_approval"):
+                print("\n" + "=" * 60)
+                print("⏸️  TRADE PAUSED - Awaiting human approval")
+                print("=" * 60)
+
+                guardian_result = result.get("guardian_result")
+                if guardian_result:
+                    print(f"\n   Policy: {guardian_result.policy_name}")
+                    print(f"   Reason: {guardian_result.reason}")
+
+                print("\nTo approve this trade:")
+                print(f"  uv run market-analyst --approve-trade --thread-id {args.thread_id}")
+                print("\nTo reject this trade:")
+                print(f"  uv run market-analyst --reject-trade --thread-id {args.thread_id}")
+
+            elif result.get("trade_executed"):
+                print("\n" + "=" * 60)
+                print("🎉 Combined workflow complete!")
+                print("=" * 60)
+                print("   ✅ Report published")
+                print("   ✅ Trade executed")
+
             else:
-                draft_report = None
+                # Either no trade (hold) or rejected
+                guardian_result = result.get("guardian_result")
+                if guardian_result and guardian_result.decision.value == "reject":
+                    print(f"\n❌ Trade blocked by Guardian: {guardian_result.reason}")
+                else:
+                    print("\n✅ Analysis complete (no trade action - hold recommendation)")
 
-            if draft_report:
-                print(format_report_for_display(draft_report))
-            else:
-                print("\n(No report content to display)")
         else:
-            print("\n⚠️  Report could not be published")
+            # Standard analysis workflow
+            result = approve_and_publish(
+                thread_id=args.thread_id,
+                checkpointer=checkpointer,
+            )
+
+            if result.get("published"):
+                print("\n🎉 Report published successfully!")
+
+                # Display the final report
+                state = result.get("state", {})
+                # Handle both dict and object access
+                if hasattr(state, "draft_report"):
+                    draft_report = state.draft_report
+                elif isinstance(state, dict):
+                    draft_report = state.get("draft_report")
+                else:
+                    draft_report = None
+
+                if draft_report:
+                    print(format_report_for_display(draft_report))
+                else:
+                    print("\n(No report content to display)")
+            else:
+                print("\n⚠️  Report could not be published")
 
     except Exception as e:
         print(f"❌ Error: {e}")
@@ -453,13 +477,9 @@ def run_trade_command(args):
                 print("\n⚠️  Running with --no-persist: approval workflow disabled")
             else:
                 print("\nTo approve this trade:")
-                print(
-                    f"  uv run market-analyst --approve-trade --thread-id {thread_id}"
-                )
+                print(f"  uv run market-analyst --approve-trade --thread-id {thread_id}")
                 print("\nTo approve with modified amount:")
-                print(
-                    f"  uv run market-analyst --approve-trade --thread-id {thread_id} --modify-amount 9000"
-                )
+                print(f"  uv run market-analyst --approve-trade --thread-id {thread_id} --modify-amount 9000")
                 print("\nTo reject this trade:")
                 print(f"  uv run market-analyst --reject-trade --thread-id {thread_id}")
         else:
@@ -566,9 +586,7 @@ def run_combined_command(args):
                 print("   (Run without --no-persist to enable approval workflow)")
             else:
                 print("\nTo approve the report and continue to trade:")
-                print(
-                    f"  uv run market-analyst --approve --combined --thread-id {thread_id}"
-                )
+                print(f"  uv run market-analyst --approve --combined --thread-id {thread_id}")
 
         elif result.get("requires_trade_approval"):
             print("\n" + "=" * 60)
@@ -584,9 +602,7 @@ def run_combined_command(args):
                 print("\n⚠️  Running with --no-persist: approval workflow disabled")
             else:
                 print("\nTo approve this trade:")
-                print(
-                    f"  uv run market-analyst --approve-trade --thread-id {thread_id}"
-                )
+                print(f"  uv run market-analyst --approve-trade --thread-id {thread_id}")
                 print("\nTo reject this trade:")
                 print(f"  uv run market-analyst --reject-trade --thread-id {thread_id}")
 

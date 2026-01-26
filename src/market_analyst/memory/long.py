@@ -101,9 +101,7 @@ class LongTermMemory:
         self.save_profile(user_id, profile)
         return profile
 
-    def search_profiles(
-        self, query_vector: list[float], limit: int = 5
-    ) -> list[UserProfile]:
+    def search_profiles(self, query_vector: list[float], limit: int = 5) -> list[UserProfile]:
         """Search profiles by vector similarity."""
         results = self.client.search(
             collection_name=self.collection_name,
@@ -114,9 +112,7 @@ class LongTermMemory:
         profiles = []
         for point in results:
             if point.payload:
-                profile_data = {
-                    k: v for k, v in point.payload.items() if k != "user_id"
-                }
+                profile_data = {k: v for k, v in point.payload.items() if k != "user_id"}
                 profiles.append(UserProfile(**profile_data))
 
         return profiles

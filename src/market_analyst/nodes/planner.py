@@ -64,16 +64,12 @@ def planner_node(state: AgentState) -> dict:
     structured_llm = llm.with_structured_output(PlanOutput)
 
     # Get the last user message
-    user_messages = [
-        m for m in state.messages if hasattr(m, "type") and m.type == "human"
-    ]
+    user_messages = [m for m in state.messages if hasattr(m, "type") and m.type == "human"]
     if not user_messages:
         # Check for HumanMessage instances
         user_messages = [m for m in state.messages if isinstance(m, HumanMessage)]
 
-    last_user_message = (
-        user_messages[-1].content if user_messages else "Analyze the market"
-    )
+    last_user_message = user_messages[-1].content if user_messages else "Analyze the market"
 
     # Include user profile context if available
     profile_context = ""
