@@ -22,6 +22,7 @@ from market_analyst.workflows.analysis_workflow import (
     run_analysis,
 )
 from market_analyst.workflows.combined_workflow import (
+    approve_combined_report,
     run_combined_analysis,
 )
 from market_analyst.workflows.trade_workflow import approve_trade, run_trade
@@ -352,30 +353,73 @@ def approve_report(args):
     try:
         checkpointer = get_checkpointer()
 
-        result = approve_and_publish(
-            thread_id=args.thread_id,
-            checkpointer=checkpointer,
-        )
+        if args.combined:
+            # Combined workflow: Approve report and continue to trade
+            result = approve_combined_report(
+                thread_id=args.thread_id,
+                checkpointer=checkpointer,
+            )
 
-        if result.get("published"):
-            print("\n🎉 Report published successfully!")
+            if result.get("published") or result.get("state", {}).get("report_approved"):
+                print("\n🎉 Report published successfully!")
 
-            # Display the final report
-            state = result.get("state", {})
-            # Handle both dict and object access
-            if hasattr(state, "draft_report"):
-                draft_report = state.draft_report
-            elif isinstance(state, dict):
-                draft_report = state.get("draft_report")
+            # Check for next steps in combined workflow
+            if result.get("requires_trade_approval"):
+                print("\n" + "=" * 60)
+                print("⏸️  TRADE PAUSED - Awaiting human approval")
+                print("=" * 60)
+
+                guardian_result = result.get("guardian_result")
+                if guardian_result:
+                    print(f"\n   Policy: {guardian_result.policy_name}")
+                    print(f"   Reason: {guardian_result.reason}")
+
+                print("\nTo approve this trade:")
+                print(f"  uv run market-analyst --approve-trade --thread-id {args.thread_id}")
+                print("\nTo reject this trade:")
+                print(f"  uv run market-analyst --reject-trade --thread-id {args.thread_id}")
+
+            elif result.get("trade_executed"):
+                print("\n" + "=" * 60)
+                print("🎉 Combined workflow complete!")
+                print("=" * 60)
+                print("   ✅ Report published")
+                print("   ✅ Trade executed")
+
             else:
-                draft_report = None
+                # Either no trade (hold) or rejected
+                guardian_result = result.get("guardian_result")
+                if guardian_result and guardian_result.decision.value == "reject":
+                    print(f"\n❌ Trade blocked by Guardian: {guardian_result.reason}")
+                else:
+                    print("\n✅ Analysis complete (no trade action - hold recommendation)")
 
-            if draft_report:
-                print(format_report_for_display(draft_report))
-            else:
-                print("\n(No report content to display)")
         else:
-            print("\n⚠️  Report could not be published")
+            # Standard analysis workflow
+            result = approve_and_publish(
+                thread_id=args.thread_id,
+                checkpointer=checkpointer,
+            )
+
+            if result.get("published"):
+                print("\n🎉 Report published successfully!")
+
+                # Display the final report
+                state = result.get("state", {})
+                # Handle both dict and object access
+                if hasattr(state, "draft_report"):
+                    draft_report = state.draft_report
+                elif isinstance(state, dict):
+                    draft_report = state.get("draft_report")
+                else:
+                    draft_report = None
+
+                if draft_report:
+                    print(format_report_for_display(draft_report))
+                else:
+                    print("\n(No report content to display)")
+            else:
+                print("\n⚠️  Report could not be published")
 
     except Exception as e:
         print(f"❌ Error: {e}")
