@@ -34,6 +34,19 @@ services:
       timeout: 5s
       retries: 5
 
+  # Redis for alternative hot memory checkpointer
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   # Market Analyst Agent application
   app:
     build:
@@ -47,11 +60,14 @@ services:
       - POSTGRES_DB=market_analyst
       - POSTGRES_USER=analyst
       - POSTGRES_PASSWORD=analyst_pass
+      - REDIS_URL=redis://redis:6379/0
 
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
       qdrant:
@@ -66,3 +82,5 @@ volumes:
   postgres_data:
 
   qdrant_data:
+
+  redis_data:
