@@ -219,7 +219,7 @@ def run_analysis(
     Returns:
         Final state with draft report
     """
-    # Load user profile from Redis
+    # Load user profile from Qdrant
     user_profile = load_user_profile(user_id)
 
     # Create initial state

@@ -16,15 +16,20 @@ services:
       timeout: 5s
       retries: 5
 
-  # Redis for user profile memory
-  redis:
-    image: redis:7-alpine
+  # Qdrant for Long-Term Memory (Vector DB)
+  qdrant:
+    image: qdrant/qdrant:latest
     ports:
-      - "6379:6379"
+      - "6333:6333"
+      - "6334:6334"
     volumes:
-      - redis_data:/data
+      - qdrant_data:/qdrant/storage
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test:
+        [
+          "CMD-SHELL",
+          "wget --no-verbose --tries=1 --spider http://localhost:6333/dashboard || exit 1",
+        ]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -42,12 +47,14 @@ services:
       - POSTGRES_DB=market_analyst
       - POSTGRES_USER=analyst
       - POSTGRES_PASSWORD=analyst_pass
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
+
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
+
+      qdrant:
         condition: service_healthy
     # Keep container running for interactive use
     stdin_open: true
@@ -57,4 +64,5 @@ services:
 
 volumes:
   postgres_data:
-  redis_data:
+
+  qdrant_data:

@@ -15,7 +15,7 @@ class ExecutionMode(str, Enum):
 
 
 class UserProfile(BaseModel):
-    """User investment profile stored in Redis for cross-thread memory."""
+    """User investment profile stored in Qdrant for cross-thread memory."""
 
     risk_tolerance: Literal["conservative", "moderate", "aggressive"] = Field(
         default="moderate", description="User's risk tolerance level"
@@ -157,7 +157,7 @@ class AgentState(BaseModel):
     draft_report: DraftReport | None = None
     report_approved: bool = False
 
-    # User context (loaded from Redis at start)
+    # User context (loaded from Qdrant at start)
     user_profile: UserProfile = Field(default_factory=UserProfile)
     user_id: str = "default"
 

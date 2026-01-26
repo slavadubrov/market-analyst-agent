@@ -223,7 +223,7 @@ Examples:
 
 
 def set_user_profile(args):
-    """Set user profile preferences in Redis."""
+    """Set user profile preferences in Qdrant."""
 
     try:
         store = get_profile_store()
@@ -243,7 +243,7 @@ def set_user_profile(args):
         print(f"   Investment Horizon: {profile.investment_horizon}")
 
     except Exception as e:
-        print(f"⚠️  Could not save to Redis (might not be running): {e}")
+        print(f"⚠️  Could not save to Qdrant (might not be running): {e}")
         print("   Profile will use defaults")
 
 
