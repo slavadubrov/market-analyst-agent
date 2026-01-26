@@ -1,0 +1,129 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 400">
+  <defs>
+    <!-- Gradients -->
+    <linearGradient id="btnStart" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3b82f6"/>
+      <stop offset="100%" style="stop-color:#2563eb"/>
+    </linearGradient>
+    <linearGradient id="btnAction" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#6366f1"/>
+      <stop offset="100%" style="stop-color:#4f46e5"/>
+    </linearGradient>
+    <linearGradient id="btnEnd" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ef4444"/>
+      <stop offset="100%" style="stop-color:#dc2626"/>
+    </linearGradient>
+    <linearGradient id="guardianGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0ea5e9"/>
+      <stop offset="100%" style="stop-color:#0284c7"/>
+    </linearGradient>
+    <linearGradient id="hitlGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ec4899"/>
+      <stop offset="100%" style="stop-color:#db2777"/>
+    </linearGradient>
+    <linearGradient id="rejectGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f43f5e"/>
+      <stop offset="100%" style="stop-color:#e11d48"/>
+    </linearGradient>
+    
+    <!-- Drop shadow filter -->
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.15"/>
+    </filter>
+
+    <!-- Arrow markers -->
+    <marker id="arrowGray" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#64748b"/>
+    </marker>
+    <marker id="arrowBlue" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#0284c7"/>
+    </marker>
+    <marker id="arrowGreen" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#059669"/>
+    </marker>
+     <marker id="arrowRed" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#e11d48"/>
+    </marker>
+    <marker id="arrowPink" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#db2777"/>
+    </marker>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="800" height="400" fill="#fafafa"/>
+  
+  <!-- Title -->
+  <text x="400" y="32" font-family="Inter, system-ui, sans-serif" font-size="18" font-weight="600" fill="#1e293b" text-anchor="middle">Trade Workflow (Guardian Pattern)</text>
+  
+  <!-- START node -->
+  <g filter="url(#shadow)">
+    <rect x="50" y="180" width="75" height="40" rx="20" fill="url(#btnStart)"/>
+    <text x="87" y="205" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="600" fill="white" text-anchor="middle">START</text>
+  </g>
+  
+  <!-- Guardian node (Policy Layer) -->
+  <g filter="url(#shadow)">
+    <rect x="200" y="173" width="100" height="54" rx="8" fill="url(#guardianGrad)"/>
+    <text x="250" y="195" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="600" fill="white" text-anchor="middle">Guardian</text>
+    <text x="250" y="213" font-family="Inter, system-ui, sans-serif" font-size="9" fill="rgba(255,255,255,0.8)" text-anchor="middle">(Policy Layer)</text>
+  </g>
+  
+  <!-- START to Guardian arrow -->
+  <path d="M125,200 L195,200" stroke="#64748b" stroke-width="2" marker-end="url(#arrowGray)" fill="none"/>
+  
+  <!-- Execute node (Middle path) -->
+  <g filter="url(#shadow)">
+    <rect x="550" y="180" width="90" height="40" rx="6" fill="#10b981" stroke="#059669" stroke-width="1.5"/>
+    <text x="595" y="205" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="500" fill="white" text-anchor="middle">Execute Trade</text>
+  </g>
+
+  <!-- Compliance Officer node (Upper path) -->
+  <g filter="url(#shadow)">
+    <rect x="380" y="80" width="120" height="40" rx="6" fill="url(#hitlGrad)"/>
+    <text x="440" y="98" font-family="Inter, system-ui, sans-serif" font-size="11" font-weight="500" fill="white" text-anchor="middle">Compliance Officer</text>
+    <text x="440" y="112" font-family="Inter, system-ui, sans-serif" font-size="9" fill="rgba(255,255,255,0.9)" text-anchor="middle">(HITL Approval)</text>
+  </g>
+  
+  <!-- Rejected node (Lower path) -->
+  <g filter="url(#shadow)">
+    <rect x="380" y="280" width="90" height="40" rx="6" fill="url(#rejectGrad)"/>
+    <text x="425" y="305" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="500" fill="white" text-anchor="middle">Rejected</text>
+  </g>
+  
+  <!-- Guardian to Execute (Approve) arrow -->
+  <path d="M300,200 L545,200" stroke="#059669" stroke-width="2" marker-end="url(#arrowGreen)" fill="none"/>
+  <text x="440" y="195" font-family="Inter, system-ui, sans-serif" font-size="10" fill="#059669" font-weight="600" text-anchor="middle">APPROVE</text>
+  <text x="440" y="215" font-family="Inter, system-ui, sans-serif" font-size="9" fill="#059669" font-style="italic" text-anchor="middle">(Low Risk / Safe)</text>
+  
+  <!-- Guardian to Compliance (Escalate) arrow -->
+  <path d="M280,173 L280,100 L375,100" stroke="#db2777" stroke-width="2" marker-end="url(#arrowPink)" fill="none" stroke-dasharray="5,3"/>
+  <text x="290" y="140" font-family="Inter, system-ui, sans-serif" font-size="10" fill="#db2777" font-weight="600" transform="rotate(-90 290 140)">ESCALATE</text>
+  
+  <!-- Compliance to Execute arrow -->
+  <path d="M500,100 L595,100 L595,175" stroke="#db2777" stroke-width="2" marker-end="url(#arrowPink)" fill="none"/>
+  
+  <!-- Guardian to Rejected (Block) arrow -->
+  <path d="M280,227 L280,300 L375,300" stroke="#e11d48" stroke-width="2" marker-end="url(#arrowRed)" fill="none" stroke-dasharray="5,3"/>
+  <text x="290" y="270" font-family="Inter, system-ui, sans-serif" font-size="10" fill="#e11d48" font-weight="600" transform="rotate(90 290 270)">REJECT</text>
+  
+  <!-- Rejected to END arrow -->
+  <path d="M470,300 L680,300 L680,225" stroke="#e11d48" stroke-width="2" marker-end="url(#arrowRed)" fill="none"/>
+
+  <!-- END node -->
+  <g filter="url(#shadow)">
+    <rect x="700" y="180" width="50" height="40" rx="20" fill="url(#btnEnd)"/>
+    <text x="725" y="205" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="600" fill="white" text-anchor="middle">END</text>
+  </g>
+  
+  <!-- Execute to END arrow -->
+  <path d="M640,200 L695,200" stroke="#64748b" stroke-width="2" marker-end="url(#arrowGray)" fill="none"/>
+  
+  <!-- Legend -->
+  <g transform="translate(25, 360)">
+    <text x="0" y="0" font-family="Inter, system-ui, sans-serif" font-size="10" font-weight="600" fill="#64748b">Policies:</text>
+    
+    <text x="15" y="15" font-family="Inter, system-ui, sans-serif" font-size="9" fill="#059669">• &lt; $500: Auto-Approve</text>
+    <text x="150" y="15" font-family="Inter, system-ui, sans-serif" font-size="9" fill="#db2777">• $500 - $10k: Escalate to Human</text>
+    <text x="320" y="15" font-family="Inter, system-ui, sans-serif" font-size="9" fill="#e11d48">• Dangerous Actions: Block Immediately</text>
+  </g>
+</svg>

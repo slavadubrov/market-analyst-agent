@@ -319,9 +319,45 @@ uv run market-analyst --trade --action delete_logs --ticker NVDA --amount 0
 
 ## Architecture
 
-The agent uses a **Router** to classify user intent and dispatch to the appropriate execution path:
+This project implements **three distinct workflows** to demonstrate different agentic patterns:
 
-![Architecture Diagram](docs/architecture.svg)
+### 1. Analysis Workflow
+
+**Patterns: Router, ReAct, ReWOO, Plan-and-Execute**
+
+The entry point for stock research. A **Router** classifies the user's intent to choose between deep research and a quick snapshot.
+
+![Analysis Workflow](docs/analysis_workflow.svg)
+
+- **Deep Research (ReAct)**: Used for comprehensive queries ("Analyze NVDA vs AMD"). Uses a **Planner** to breakdown the task and an **Executor** loop to iteratively gather information.
+- **Flash Briefing (ReWOO)**: Used for status checks ("NVDA price"). Uses a **Planner** to generate independent tool calls that run in **parallel**, followed by a **Solver** that synthesizes the results.
+
+### 2. Trade Workflow
+
+**Patterns: Guardian, Human-in-the-Loop (HITL)**
+
+A safe environment for executing sensitive actions. The **Guardian** acts as a policy engine (Policy-as-Code) to enforce rules before any action is taken.
+
+![Trade Workflow](docs/trade_workflow.svg)
+
+- **Guardian Node**: Deterministically checks the trade against safety policies.
+- **Auto-Approval**: Safe operations (e.g., small trades) proceed directly to execution.
+- **Escalation**: Risky operations (e.g., large trades) are paused for **Human Review**.
+- **Rejection**: Dangerous operations (e.g., deleting logs) are blocked immediately.
+
+### 3. Combined Workflow (The "Full Stack" Demo)
+
+**Patterns: All of the above + Chaining**
+
+chains the Analysis and Trade workflows into a complete end-to-end experience:
+
+![Combined Architecture](docs/architecture.svg)
+
+1. **Analysis**: The agent researches a stock and generates a report.
+2. **Report Approval**: You review and approve the report (HITL).
+3. **Trade Proposal**: If the report recommends "Buy", a trade is proposed.
+4. **Guardian Check**: The Guardian checks if the trade is safe.
+5. **Execution**: The trade is executed (simulated).
 
 **Key Difference:**
 
