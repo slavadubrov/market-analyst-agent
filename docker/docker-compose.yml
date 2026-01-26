@@ -36,7 +36,7 @@ services:
 
   # Redis for alternative hot memory checkpointer
   redis:
-    image: redis:alpine
+    image: redis:7-alpine
     ports:
       - "6379:6379"
     volumes:
@@ -60,8 +60,8 @@ services:
       - POSTGRES_DB=market_analyst
       - POSTGRES_USER=analyst
       - POSTGRES_PASSWORD=analyst_pass
-      - REDIS_URL=redis://redis:6379/0
-
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
     depends_on:
@@ -69,7 +69,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-
       qdrant:
         condition: service_healthy
     # Keep container running for interactive use
