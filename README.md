@@ -84,6 +84,9 @@ make db-up
 
 # Stop Databases
 make db-down
+
+# Clean up environment (remove virtual environment, caches, stop containers)
+make clean
 ```
 
 If you don't have `make` installed, you can run the commands directly using `uv` or `docker compose` (see Makefile for details).

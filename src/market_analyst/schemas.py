@@ -4,7 +4,7 @@ from enum import Enum
 from typing import Annotated, Literal
 
 from langgraph.graph.message import add_messages
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ExecutionMode(str, Enum):
@@ -162,5 +162,4 @@ class AgentState(BaseModel):
     # Workflow control
     error: str | None = None
 
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
