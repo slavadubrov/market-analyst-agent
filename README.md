@@ -1,8 +1,8 @@
 # Market Analyst Agent
 
-> ⚠️ **DISCLAIMER**: This is a **beginner demo project for educational purposes only**. Do NOT use this for actual trading or investment decisions. The analysis generated is for learning about agentic AI patterns and should not be considered financial advice.
+> ⚠️ **DISCLAIMER**: This is a **demo project for educational purposes only**, created for the **"Engineering the Agentic Stack"** article series. Do NOT use this for actual trading or investment decisions. The trading functionality is **simulated** (no real trades are executed) and the analysis should not be considered financial advice.
 
-An **Autonomous Investment Research Agent** demonstrating production-ready agentic patterns from the **"Engineering the Agentic Stack"** blog series.
+An **Autonomous Investment Research Agent** demonstrating production-ready agentic patterns. This repo serves as a hands-on companion to the blog series, showcasing **ReAct**, **ReWOO**, **Plan-and-Execute**, and **Human-in-the-Loop** patterns in a realistic market research context.
 
 This project showcases how to build a sophisticated AI agent that can research stocks, analyze market data, and generate investment reports—while maintaining state, respecting human oversight, and running reliably in production environments.
 
@@ -288,36 +288,76 @@ uv run market-analyst --resume --thread-id <thread-id>
 uv run market-analyst --approve --thread-id <thread-id>
 ```
 
+### Guardian Trade Workflow (Article 4 Demo)
+
+The Guardian demonstrates automated policy enforcement with HITL escalation.
+
+> **⚠️ Note**: All trades are **simulated** — this demo does not execute real trades.
+
+```bash
+# Low-value trade (auto-approved by Guardian)
+uv run market-analyst --trade --action buy --ticker NVDA --amount 300
+
+# High-value trade (escalated to human)
+uv run market-analyst --trade --action buy --ticker NVDA --amount 50000
+# → Guardian pauses for approval
+uv run market-analyst --approve-trade --thread-id <thread-id>
+
+# Dangerous action (auto-rejected by Guardian)
+uv run market-analyst --trade --action delete_logs --ticker NVDA --amount 0
+# → Guardian blocks immediately (no human involvement)
+```
+
+**Policy Thresholds (configurable in `guardian.py`):**
+
+- `< $500`: Auto-approved (safe path)
+- `$500 - $10,000`: Escalated for human review
+- `> $10,000`: Escalated (high-value threshold)
+- `delete_*` actions: Auto-rejected (restricted)
+
 ---
 
 ## Architecture
 
-The agent uses a **Router** to classify user intent and dispatch to the appropriate execution path:
+This project implements **three distinct workflows** to demonstrate different agentic patterns:
 
-```
-                              ┌─────────────────────────────────────────────────┐
-                              │            DEEP RESEARCH (ReAct)                │
-                              │  ┌─────────┐   ┌──────────┐   ┌──────────┐     │
-                         ┌───▶│  │ Planner │──▶│ Executor │──▶│ Reporter │─────┼──┐
-                         │    │  └─────────┘   └────┬─────┘   └──────────┘     │  │
-┌─────────┐   ┌────────┐ │    │                     │ loop                     │  │
-│  START  │──▶│ Router │─┤    └─────────────────────┼─────────────────────────┘  │
-└─────────┘   └────────┘ │                          ▼                            │
-                         │                    ┌───────────┐                      │
-                         │                    │   Tools   │                      │
-                         │                    └───────────┘                      ▼
-                         │    ┌─────────────────────────────────────────┐   ┌─────────┐
-                         │    │          FLASH BRIEFING (ReWOO)         │   │ Publish │──▶ END
-                         │    │  ┌─────────┐  ┌────────┐  ┌────────┐   │   └─────────┘
-                         └───▶│  │ Planner │─▶│ Worker │─▶│ Solver │───┼──────▲
-                              │  └─────────┘  └───┬────┘  └────────┘   │      │
-                              │                   │ parallel           │      │
-                              └───────────────────┼────────────────────┘      │
-                                                  ▼                           │
-                                             ┌───────────┐                    │
-                                             │   Tools   │                HITL Approval
-                                             └───────────┘
-```
+### 1. Analysis Workflow
+
+**Patterns: Router, ReAct, ReWOO, Plan-and-Execute**
+
+The entry point for stock research. A **Router** classifies the user's intent to choose between deep research and a quick snapshot.
+
+![Analysis Workflow](docs/analysis_workflow.svg)
+
+- **Deep Research (ReAct)**: Used for comprehensive queries ("Analyze NVDA vs AMD"). Uses a **Planner** to breakdown the task and an **Executor** loop to iteratively gather information.
+- **Flash Briefing (ReWOO)**: Used for status checks ("NVDA price"). Uses a **Planner** to generate independent tool calls that run in **parallel**, followed by a **Solver** that synthesizes the results.
+
+### 2. Trade Workflow
+
+**Patterns: Guardian, Human-in-the-Loop (HITL)**
+
+A safe environment for executing sensitive actions. The **Guardian** acts as a policy engine (Policy-as-Code) to enforce rules before any action is taken.
+
+![Trade Workflow](docs/trade_workflow.svg)
+
+- **Guardian Node**: Deterministically checks the trade against safety policies.
+- **Auto-Approval**: Safe operations (e.g., small trades) proceed directly to execution.
+- **Escalation**: Risky operations (e.g., large trades) are paused for **Human Review**.
+- **Rejection**: Dangerous operations (e.g., deleting logs) are blocked immediately.
+
+### 3. Combined Workflow (The "Full Stack" Demo)
+
+**Patterns: All of the above + Chaining**
+
+chains the Analysis and Trade workflows into a complete end-to-end experience:
+
+![Combined Architecture](docs/architecture.svg)
+
+1. **Analysis**: The agent researches a stock and generates a report.
+2. **Report Approval**: You review and approve the report (HITL).
+3. **Trade Proposal**: If the report recommends "Buy", a trade is proposed.
+4. **Guardian Check**: The Guardian checks if the trade is safe.
+5. **Execution**: The trade is executed (simulated).
 
 **Key Difference:**
 
@@ -336,17 +376,19 @@ The agent uses a **Router** to classify user intent and dispatch to the appropri
 
 ---
 
-## Blog Series Mapping
+## Article Series: "Engineering the Agentic Stack"
 
-This project demonstrates concepts from each part of the blog series:
+This project is the **demo companion** for the article series. Each part of the series has corresponding implementations in this repo:
 
-| Blog Post | Demo Feature |
-|-----------|--------------|
-| Part 1: Cognitive Engine | **Router** + ReAct (deep) + ReWOO (flash) in `nodes/` |
-| Part 2: The Cortex | PostgreSQL checkpointing + Redis profiles |
-| Part 3: Tool Ergonomics | Pydantic-validated tools in `tools/` |
-| Part 4: Human-in-the-Loop | `interrupt_before` on report publishing |
-| Part 5: Production | Docker Compose deployment |
+| Article | Concepts Covered | Demo Implementation |
+|---------|-----------------|---------------------|
+| **Part 1: Cognitive Engine** | Reasoning loops: ReAct vs ReWOO vs Plan-and-Execute | `router.py` classifies intent → `planner.py` + `executor.py` (ReAct) or `rewoo_*.py` (ReWOO) |
+| **Part 2: The Cortex** | State management, short-term vs long-term memory, checkpointing | PostgreSQL for `interrupt`/resume, Redis for user profiles |
+| **Part 3: Tool Ergonomics** | ACI design, Pydantic validation, structured outputs | `tools/` with `get_stock_info`, `search_news`, `calculate_metrics` |
+| **Part 4: Human-in-the-Loop** | Guardian pattern, HITL escalation, policy automation | `guardian.py` (deterministic) + `trade_workflow.py` (HITL demo) |
+| **Part 5: Production** | Container deployment, serverless traps, observability | `docker/docker-compose.yml` |
+
+> **📝 Note on Demo Code**: The trade execution (`trade_workflow.py`, `trade_executor.py`) is **simulated** — no real trades are executed. This is intentional to safely demonstrate the Guardian + HITL patterns without financial risk.
 
 ---
 

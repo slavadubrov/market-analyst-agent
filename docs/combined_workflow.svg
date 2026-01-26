@@ -1,0 +1,259 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 580">
+  <defs>
+    <!-- Gradients -->
+    <linearGradient id="reactGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#6366f1;stop-opacity:0.15"/>
+      <stop offset="100%" style="stop-color:#8b5cf6;stop-opacity:0.08"/>
+    </linearGradient>
+    <linearGradient id="rewooGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#10b981;stop-opacity:0.15"/>
+      <stop offset="100%" style="stop-color:#14b8a6;stop-opacity:0.08"/>
+    </linearGradient>
+    <linearGradient id="btnStart" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3b82f6"/>
+      <stop offset="100%" style="stop-color:#2563eb"/>
+    </linearGradient>
+    <linearGradient id="btnRouter" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#8b5cf6"/>
+      <stop offset="100%" style="stop-color:#7c3aed"/>
+    </linearGradient>
+    <linearGradient id="btnPublish" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#10b981"/>
+      <stop offset="100%" style="stop-color:#059669"/>
+    </linearGradient>
+    <linearGradient id="btnEnd" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ef4444"/>
+      <stop offset="100%" style="stop-color:#dc2626"/>
+    </linearGradient>
+    <linearGradient id="toolGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f59e0b"/>
+      <stop offset="100%" style="stop-color:#d97706"/>
+    </linearGradient>
+    <linearGradient id="hitlGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ec4899"/>
+      <stop offset="100%" style="stop-color:#db2777"/>
+    </linearGradient>
+    <linearGradient id="guardianGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0ea5e9"/>
+      <stop offset="100%" style="stop-color:#0284c7"/>
+    </linearGradient>
+    <linearGradient id="rejectGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f43f5e"/>
+      <stop offset="100%" style="stop-color:#e11d48"/>
+    </linearGradient>
+    
+    <!-- Drop shadow filter -->
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.15"/>
+    </filter>
+
+    <!-- Arrow markers -->
+    <marker id="arrowGray" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#64748b"/>
+    </marker>
+    <marker id="arrowPurple" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#7c3aed"/>
+    </marker>
+    <marker id="arrowTeal" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#14b8a6"/>
+    </marker>
+    <marker id="arrowOrange" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#d97706"/>
+    </marker>
+    <marker id="arrowPink" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#db2777"/>
+    </marker>
+    <marker id="arrowBlue" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#0284c7"/>
+    </marker>
+    <marker id="arrowGreen" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#059669"/>
+    </marker>
+    <marker id="arrowRed" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#e11d48"/>
+    </marker>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="1000" height="580" fill="#fafafa"/>
+  
+  <!-- Title -->
+  <text x="500" y="32" font-family="Inter, system-ui, sans-serif" font-size="18" font-weight="600" fill="#1e293b" text-anchor="middle">Market Analyst Agent Architecture</text>
+  
+  <!-- ReAct Container (Deep Research) -->
+  <rect x="230" y="55" width="400" height="185" rx="12" fill="url(#reactGrad)" stroke="#8b5cf6" stroke-width="1.5" stroke-opacity="0.4"/>
+  <text x="430" y="80" font-family="Inter, system-ui, sans-serif" font-size="13" font-weight="600" fill="#6366f1" text-anchor="middle">DEEP RESEARCH (ReAct)</text>
+  
+  <!-- ReAct nodes -->
+  <g filter="url(#shadow)">
+    <rect x="255" y="100" width="90" height="40" rx="6" fill="white" stroke="#a78bfa" stroke-width="1.5"/>
+    <text x="300" y="125" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="500" fill="#5b21b6" text-anchor="middle">Planner</text>
+  </g>
+  
+  <g filter="url(#shadow)">
+    <rect x="380" y="100" width="90" height="40" rx="6" fill="white" stroke="#a78bfa" stroke-width="1.5"/>
+    <text x="425" y="125" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="500" fill="#5b21b6" text-anchor="middle">Executor</text>
+  </g>
+  
+  <g filter="url(#shadow)">
+    <rect x="505" y="100" width="90" height="40" rx="6" fill="white" stroke="#a78bfa" stroke-width="1.5"/>
+    <text x="550" y="125" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="500" fill="#5b21b6" text-anchor="middle">Reporter</text>
+  </g>
+  
+  <!-- ReAct arrows -->
+  <path d="M345,120 L375,120" stroke="#7c3aed" stroke-width="2" marker-end="url(#arrowPurple)" fill="none"/>
+  <path d="M470,120 L500,120" stroke="#7c3aed" stroke-width="2" marker-end="url(#arrowPurple)" fill="none"/>
+  
+  <!-- Loop arrow from Executor to Tools -->
+  <path d="M425,140 L425,175" stroke="#d97706" stroke-width="2" marker-end="url(#arrowOrange)" fill="none" stroke-dasharray="5,3"/>
+  
+  <!-- Tools box for ReAct -->
+  <g filter="url(#shadow)">
+    <rect x="383" y="180" width="85" height="36" rx="6" fill="url(#toolGrad)"/>
+    <text x="425" y="203" font-family="Inter, system-ui, sans-serif" font-size="11" font-weight="500" fill="white" text-anchor="middle">Tools</text>
+  </g>
+  
+  <!-- Loop label -->
+  <text x="443" y="162" font-family="Inter, system-ui, sans-serif" font-size="9" fill="#92400e" font-style="italic">loop</text>
+  
+  <!-- ReWOO Container (Flash Briefing) -->
+  <rect x="230" y="270" width="400" height="185" rx="12" fill="url(#rewooGrad)" stroke="#14b8a6" stroke-width="1.5" stroke-opacity="0.4"/>
+  <text x="430" y="295" font-family="Inter, system-ui, sans-serif" font-size="13" font-weight="600" fill="#059669" text-anchor="middle">FLASH BRIEFING (ReWOO)</text>
+  
+  <!-- ReWOO nodes -->
+  <g filter="url(#shadow)">
+    <rect x="255" y="315" width="90" height="40" rx="6" fill="white" stroke="#5eead4" stroke-width="1.5"/>
+    <text x="300" y="340" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="500" fill="#0d9488" text-anchor="middle">Planner</text>
+  </g>
+  
+  <g filter="url(#shadow)">
+    <rect x="380" y="315" width="90" height="40" rx="6" fill="white" stroke="#5eead4" stroke-width="1.5"/>
+    <text x="425" y="340" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="500" fill="#0d9488" text-anchor="middle">Worker</text>
+  </g>
+  
+  <g filter="url(#shadow)">
+    <rect x="505" y="315" width="90" height="40" rx="6" fill="white" stroke="#5eead4" stroke-width="1.5"/>
+    <text x="550" y="340" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="500" fill="#0d9488" text-anchor="middle">Solver</text>
+  </g>
+  
+  <!-- ReWOO arrows -->
+  <path d="M345,335 L375,335" stroke="#14b8a6" stroke-width="2" marker-end="url(#arrowTeal)" fill="none"/>
+  <path d="M470,335 L500,335" stroke="#14b8a6" stroke-width="2" marker-end="url(#arrowTeal)" fill="none"/>
+  
+  <!-- Parallel arrow from Worker to Tools -->
+  <path d="M425,355 L425,390" stroke="#d97706" stroke-width="2" marker-end="url(#arrowOrange)" fill="none" stroke-dasharray="5,3"/>
+  
+  <!-- Tools box for ReWOO -->
+  <g filter="url(#shadow)">
+    <rect x="383" y="395" width="85" height="36" rx="6" fill="url(#toolGrad)"/>
+    <text x="425" y="418" font-family="Inter, system-ui, sans-serif" font-size="11" font-weight="500" fill="white" text-anchor="middle">Tools</text>
+  </g>
+  
+  <!-- Parallel label -->
+  <text x="443" y="377" font-family="Inter, system-ui, sans-serif" font-size="9" fill="#92400e" font-style="italic">parallel</text>
+  
+  <!-- START node -->
+  <g filter="url(#shadow)">
+    <rect x="25" y="235" width="75" height="40" rx="20" fill="url(#btnStart)"/>
+    <text x="62" y="260" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="600" fill="white" text-anchor="middle">START</text>
+  </g>
+  
+  <!-- Router node -->
+  <g filter="url(#shadow)">
+    <rect x="130" y="235" width="75" height="40" rx="8" fill="url(#btnRouter)"/>
+    <text x="167" y="260" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="600" fill="white" text-anchor="middle">Router</text>
+  </g>
+  
+  <!-- START to Router arrow -->
+  <path d="M100,255 L125,255" stroke="#64748b" stroke-width="2" marker-end="url(#arrowGray)" fill="none"/>
+  
+  <!-- Router to Deep Research arrow -->
+  <path d="M205,245 L217,245 L217,120 L250,120" stroke="#7c3aed" stroke-width="2" marker-end="url(#arrowPurple)" fill="none"/>
+  
+  <!-- Router to Flash Briefing arrow -->
+  <path d="M205,265 L217,265 L217,335 L250,335" stroke="#14b8a6" stroke-width="2" marker-end="url(#arrowTeal)" fill="none"/>
+  
+  <!-- Guardian node (Policy Layer) -->
+  <g filter="url(#shadow)">
+    <rect x="670" y="228" width="95" height="54" rx="8" fill="url(#guardianGrad)"/>
+    <text x="717" y="250" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="600" fill="white" text-anchor="middle">Guardian</text>
+    <text x="717" y="268" font-family="Inter, system-ui, sans-serif" font-size="9" fill="rgba(255,255,255,0.8)" text-anchor="middle">(Policy Layer)</text>
+  </g>
+  
+  <!-- Reporter to Guardian arrow -->
+  <path d="M595,120 L645,120 L645,245 L665,245" stroke="#64748b" stroke-width="2" marker-end="url(#arrowGray)" fill="none"/>
+  
+  <!-- Solver to Guardian arrow -->
+  <path d="M595,335 L645,335 L645,265 L665,265" stroke="#64748b" stroke-width="2" marker-end="url(#arrowGray)" fill="none"/>
+  
+  <!-- HITL Approval node -->
+  <g filter="url(#shadow)">
+    <rect x="683" y="340" width="70" height="38" rx="6" fill="url(#hitlGrad)"/>
+    <text x="718" y="358" font-family="Inter, system-ui, sans-serif" font-size="10" font-weight="500" fill="white" text-anchor="middle">HITL</text>
+    <text x="718" y="370" font-family="Inter, system-ui, sans-serif" font-size="10" font-weight="500" fill="white" text-anchor="middle">Approval</text>
+  </g>
+  
+  <!-- Guardian to HITL arrow (escalate) -->
+  <path d="M717,282 L717,335" stroke="#db2777" stroke-width="2" marker-end="url(#arrowPink)" fill="none" stroke-dasharray="4,2"/>
+  <text x="695" y="310" font-family="Inter, system-ui, sans-serif" font-size="8" fill="#db2777" font-style="italic">escalate</text>
+  
+  <!-- HITL to Publish arrow -->
+  <path d="M753,359 L855,359 L855,270" stroke="#db2777" stroke-width="2" marker-end="url(#arrowPink)" fill="none"/>
+  
+  <!-- Publish node -->
+  <g filter="url(#shadow)">
+    <rect x="815" y="228" width="80" height="40" rx="8" fill="url(#btnPublish)"/>
+    <text x="855" y="253" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="600" fill="white" text-anchor="middle">Publish</text>
+  </g>
+  
+  <!-- Guardian to Publish arrow (auto-approve) -->
+  <path d="M765,250 L810,250" stroke="#059669" stroke-width="2" marker-end="url(#arrowGreen)" fill="none"/>
+  <text x="787" y="242" font-family="Inter, system-ui, sans-serif" font-size="8" fill="#059669" font-style="italic">approve</text>
+  
+  <!-- END node -->
+  <g filter="url(#shadow)">
+    <rect x="935" y="235" width="50" height="40" rx="20" fill="url(#btnEnd)"/>
+    <text x="960" y="260" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="600" fill="white" text-anchor="middle">END</text>
+  </g>
+  
+  <!-- Publish to END arrow -->
+  <path d="M895,255 L930,255" stroke="#64748b" stroke-width="2" marker-end="url(#arrowGray)" fill="none"/>
+  
+  <!-- Reject path from Guardian -->
+  <g filter="url(#shadow)">
+    <rect x="683" y="135" width="70" height="36" rx="6" fill="url(#rejectGrad)"/>
+    <text x="718" y="158" font-family="Inter, system-ui, sans-serif" font-size="10" font-weight="500" fill="white" text-anchor="middle">Rejected</text>
+  </g>
+  
+  <!-- Guardian to Reject arrow -->
+  <path d="M717,228 L717,176" stroke="#e11d48" stroke-width="2" marker-end="url(#arrowRed)" fill="none" stroke-dasharray="4,2"/>
+  <text x="695" y="202" font-family="Inter, system-ui, sans-serif" font-size="8" fill="#e11d48" font-style="italic">block</text>
+  
+  <!-- Legend -->
+  <g transform="translate(25, 530)">
+    <text x="0" y="0" font-family="Inter, system-ui, sans-serif" font-size="10" font-weight="600" fill="#64748b">Legend:</text>
+    
+    <!-- ReAct indicator -->
+    <rect x="55" y="-10" width="14" height="14" rx="3" fill="url(#reactGrad)" stroke="#8b5cf6" stroke-width="1"/>
+    <text x="75" y="2" font-family="Inter, system-ui, sans-serif" font-size="9" fill="#64748b">ReAct</text>
+    
+    <!-- ReWOO indicator -->
+    <rect x="125" y="-10" width="14" height="14" rx="3" fill="url(#rewooGrad)" stroke="#14b8a6" stroke-width="1"/>
+    <text x="145" y="2" font-family="Inter, system-ui, sans-serif" font-size="9" fill="#64748b">ReWOO</text>
+    
+    <!-- Tools indicator -->
+    <rect x="200" y="-10" width="14" height="14" rx="3" fill="url(#toolGrad)"/>
+    <text x="220" y="2" font-family="Inter, system-ui, sans-serif" font-size="9" fill="#64748b">Tools</text>
+    
+    <!-- Guardian indicator -->
+    <rect x="265" y="-10" width="14" height="14" rx="3" fill="url(#guardianGrad)"/>
+    <text x="285" y="2" font-family="Inter, system-ui, sans-serif" font-size="9" fill="#64748b">Guardian</text>
+    
+    <!-- HITL indicator -->
+    <rect x="350" y="-10" width="14" height="14" rx="3" fill="url(#hitlGrad)"/>
+    <text x="370" y="2" font-family="Inter, system-ui, sans-serif" font-size="9" fill="#64748b">HITL</text>
+  </g>
+  
+  <!-- Policy summary -->
+  <text x="500" y="560" font-family="Inter, system-ui, sans-serif" font-size="9" fill="#94a3b8" text-anchor="middle">Guardian Policy: &lt;$500 auto-approve | $500-$10K escalate to HITL | dangerous actions auto-reject</text>
+</svg>

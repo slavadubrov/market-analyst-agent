@@ -1,4 +1,4 @@
-"""Main LangGraph agent workflow.
+"""Analysis workflow: Deep Research and Flash Briefing.
 
 This module defines the complete Market Analyst Agent graph with:
 - Router for intent classification (deep research vs flash briefing)
@@ -8,7 +8,6 @@ This module defines the complete Market Analyst Agent graph with:
 - Human-in-the-loop interrupts for report approval
 """
 
-import os
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -21,7 +20,7 @@ from langgraph.graph import END, START, StateGraph
 from market_analyst.memory.profile import load_user_profile
 from market_analyst.nodes.executor import executor_node
 from market_analyst.nodes.planner import planner_node
-from market_analyst.nodes.reporter import format_report_for_display, reporter_node
+from market_analyst.nodes.reporter import reporter_node
 from market_analyst.nodes.rewoo_planner import rewoo_planner_node
 from market_analyst.nodes.rewoo_solver import rewoo_solver_node
 from market_analyst.nodes.rewoo_worker import rewoo_worker_node
