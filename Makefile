@@ -43,6 +43,10 @@ run-trade: install db-up
 run: install db-up
 	uv run python -m market_analyst.cli --combined "Analyze NVDA stock" --trade-amount 1000
 
+# Run the Gradio Web UI
+run-ui: install db-up
+	uv run python src/market_analyst/app.py
+
 # Clean up
 clean: docker-down
 	rm -rf .venv
