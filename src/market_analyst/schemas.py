@@ -87,6 +87,49 @@ class DraftReport(BaseModel):
     risk_factors: list[str] = Field(default_factory=list)
 
 
+class TradeAction(str, Enum):
+    """Supported trade actions."""
+
+    BUY = "buy"
+    SELL = "sell"
+    DELETE_PORTFOLIO = "delete_portfolio"
+    DELETE_LOGS = "delete_logs"
+
+
+class TradeRequest(BaseModel):
+    """A trade request that requires policy validation.
+
+    This represents an action the agent wants to take that may
+    need human approval based on configured policies.
+    """
+
+    action: TradeAction = Field(description="The type of trade action")
+    ticker: str = Field(description="Stock ticker symbol")
+    amount_usd: float = Field(ge=0, description="Trade amount in USD")
+    reason: str = Field(description="Agent's reasoning for the trade")
+
+
+class GuardianDecision(str, Enum):
+    """Decisions the Guardian can make."""
+
+    APPROVE = "approve"  # Auto-approve (safe path)
+    ESCALATE = "escalate"  # Needs human review
+    REJECT = "reject"  # Auto-reject (policy violation)
+
+
+class GuardianResult(BaseModel):
+    """Result from the Guardian policy check.
+
+    The Guardian is an automated, deterministic policy layer that
+    inspects actions before they execute.
+    """
+
+    decision: GuardianDecision
+    policy_name: str = Field(description="Which policy triggered the decision")
+    reason: str = Field(description="Human-readable explanation")
+    original_request: TradeRequest | None = None
+
+
 class AgentState(BaseModel):
     """Main state for the Market Analyst Agent graph.
 
@@ -117,6 +160,12 @@ class AgentState(BaseModel):
     # User context (loaded from Redis at start)
     user_profile: UserProfile = Field(default_factory=UserProfile)
     user_id: str = "default"
+
+    # Guardian workflow (for trade actions with policy checks)
+    pending_trade: TradeRequest | None = None
+    guardian_result: GuardianResult | None = None
+    trade_approved: bool = False
+    trade_executed: bool = False
 
     # Workflow control
     error: str | None = None
