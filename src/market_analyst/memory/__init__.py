@@ -1,14 +1,34 @@
-"""Memory module for Market Analyst Agent."""
+"""Memory module for Market Analyst Agent.
 
-from market_analyst.memory.checkpointer import (
+Restructured into:
+- hot: Short-term state persistence (PostgreSQL)
+- long: Long-term memory and profiles (Qdrant)
+"""
+
+from market_analyst.memory.hot import (
+    checkpointer_context,
     get_checkpointer,
-    get_postgres_connection_string,
+    get_thread_state,
+    list_thread_history,
 )
-from market_analyst.memory.profile import ProfileStore, get_profile_store
+from market_analyst.memory.long import (
+    LongTermMemory,
+    get_long_term_memory,
+    load_user_profile,
+    save_user_profile,
+)
+from market_analyst.memory.postgres import get_connection_string
 
 __all__ = [
+    # Hot Memory
     "get_checkpointer",
-    "get_postgres_connection_string",
-    "ProfileStore",
-    "get_profile_store",
+    "checkpointer_context",
+    "get_thread_state",
+    "list_thread_history",
+    "get_connection_string",
+    # Long Memory
+    "LongTermMemory",
+    "get_long_term_memory",
+    "load_user_profile",
+    "save_user_profile",
 ]

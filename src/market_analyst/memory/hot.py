@@ -1,63 +1,16 @@
-"""PostgreSQL checkpointer for state persistence.
+"""Hot memory (short-term state) management using PostgreSQL.
 
-This module provides checkpoint functionality using PostgresSaver,
-enabling the agent to:
+This module enables:
 1. Pause and resume mid-analysis
-2. Survive system crashes
-3. Support time-travel debugging
+2. Crash recovery
+3. Time-travel debugging
 """
 
-import os
 from contextlib import contextmanager
 
 from langgraph.checkpoint.postgres import PostgresSaver
-from psycopg_pool import ConnectionPool
 
-
-def get_postgres_connection_string() -> str:
-    """Build PostgreSQL connection string from environment variables."""
-    host = os.getenv("POSTGRES_HOST", "localhost")
-    port = os.getenv("POSTGRES_PORT", "5432")
-    db = os.getenv("POSTGRES_DB", "market_analyst")
-    user = os.getenv("POSTGRES_USER", "analyst")
-    password = os.getenv("POSTGRES_PASSWORD", "analyst_pass")
-
-    return f"postgresql://{user}:{password}@{host}:{port}/{db}"
-
-
-# Global connection pool - reused across calls
-_connection_pool: ConnectionPool | None = None
-
-
-def _close_pool():
-    """Close the connection pool on exit."""
-    global _connection_pool
-    if _connection_pool is not None:
-        try:
-            _connection_pool.close()
-        except Exception:
-            pass
-        _connection_pool = None
-
-
-# Register cleanup handler
-import atexit
-
-atexit.register(_close_pool)
-
-
-def _get_pool() -> ConnectionPool:
-    """Get or create the global connection pool."""
-    global _connection_pool
-    if _connection_pool is None:
-        connection_string = get_postgres_connection_string()
-        _connection_pool = ConnectionPool(
-            connection_string,
-            min_size=1,
-            max_size=10,
-            kwargs={"autocommit": True},  # Important for setup() and checkpointing
-        )
-    return _connection_pool
+from market_analyst.memory.postgres import get_connection_pool
 
 
 def get_checkpointer() -> PostgresSaver:
@@ -69,15 +22,10 @@ def get_checkpointer() -> PostgresSaver:
     - Tool call results
     - Plan progress
 
-    This enables:
-    - Pause/resume functionality
-    - Crash recovery
-    - State inspection for debugging
-
     Returns:
         Configured PostgresSaver instance
     """
-    pool = _get_pool()
+    pool = get_connection_pool()
     checkpointer = PostgresSaver(pool)
     checkpointer.setup()
 
@@ -97,7 +45,7 @@ def checkpointer_context():
     try:
         yield checkpointer
     finally:
-        pass  # Pool manages connection lifecycle
+        pass  # Pool manages connection lifecycle, handled by postgres module
 
 
 def get_thread_state(thread_id: str, checkpointer: PostgresSaver) -> dict | None:

@@ -1,45 +1,33 @@
-"""Qdrant-based store for long-term memory.
+"""Long-term memory management using Qdrant.
 
-This module provides the interface to Qdrant Vector DB for:
+This module provides the interface for:
 1. Storing User Profiles (long-term preferences)
 2. Storing Semantic Memories (knowledge)
 3. Vector Search capabilities (RAG)
 """
 
-import json
-import os
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import List
 
-from qdrant_client import QdrantClient
 from qdrant_client.http import models
 
+from market_analyst.memory.qdrant import (
+    DEFAULT_COLLECTION_NAME,
+    VECTOR_SIZE,
+    ensure_collection,
+    get_client,
+)
 from market_analyst.schemas import UserProfile
 
 
-class QdrantStore:
-    """Qdrant-based store for user profiles and semantic memory.
+class LongTermMemory:
+    """Manager for long-term memory storage and retrieval."""
 
-    Implements long-term storage, enabling semantic search.
-    """
-
-    COLLECTION_NAME = "user_profiles"
-    VECTOR_SIZE = 768  # Standard size for many embedding models (e.g. HuggingFace)
-
-    def __init__(self, host: str = "localhost", port: int = 6333):
-        """Initialize Qdrant client."""
-        self.client = QdrantClient(host=host, port=port)
-        self._ensure_collection()
-
-    def _ensure_collection(self):
-        """Ensure the collection exists."""
-        if not self.client.collection_exists(self.COLLECTION_NAME):
-            self.client.create_collection(
-                collection_name=self.COLLECTION_NAME,
-                vectors_config=models.VectorParams(
-                    size=self.VECTOR_SIZE, distance=models.Distance.COSINE
-                ),
-            )
+    def __init__(self):
+        self.client = get_client()
+        ensure_collection(self.client)
+        self.vector_size = VECTOR_SIZE
+        self.collection_name = DEFAULT_COLLECTION_NAME
 
     def _get_dummy_vector(self) -> List[float]:
         """Generate a dummy vector for when we don't have an embedding model yet.
@@ -47,16 +35,13 @@ class QdrantStore:
         TODO: Integrate a real embedding model (e.g. fastembed or OpenAI/Anthropic).
         For now, we just want to enable storage and exact retrieval by user_id.
         """
-        return [0.0] * self.VECTOR_SIZE
+        return [0.0] * self.vector_size
 
     def get_profile(self, user_id: str) -> UserProfile:
-        """Retrieve user profile by User ID (Exact Match).
-
-        We store the user_id in the payload and use a Filter for retrieval.
-        """
+        """Retrieve user profile by User ID (Exact Match)."""
         # Search by payload filter (exact match on user_id)
         results = self.client.scroll(
-            collection_name=self.COLLECTION_NAME,
+            collection_name=self.collection_name,
             scroll_filter=models.Filter(
                 must=[
                     models.FieldCondition(
@@ -92,7 +77,7 @@ class QdrantStore:
             payload["user_id"] = user_id  # Add user_id to payload for filtering
 
             self.client.upsert(
-                collection_name=self.COLLECTION_NAME,
+                collection_name=self.collection_name,
                 points=[
                     models.PointStruct(
                         id=point_id,
@@ -103,19 +88,26 @@ class QdrantStore:
             )
             return True
         except Exception as e:
-            print(f"Error saving to Qdrant: {e}")
+            print(f"Error saving to long-term memory: {e}")
             return False
+
+    def update_profile(self, user_id: str, **updates) -> UserProfile:
+        """Partially update a user profile."""
+        profile = self.get_profile(user_id)
+
+        for key, value in updates.items():
+            if hasattr(profile, key):
+                setattr(profile, key, value)
+
+        self.save_profile(user_id, profile)
+        return profile
 
     def search_profiles(
         self, query_vector: List[float], limit: int = 5
     ) -> List[UserProfile]:
-        """Search profiles by vector similarity.
-
-        This enables finding "similar users" or accessing profiles based on semantic
-        matching if we were embedding their bio/preferences.
-        """
+        """Search profiles by vector similarity."""
         results = self.client.search(
-            collection_name=self.COLLECTION_NAME,
+            collection_name=self.collection_name,
             query_vector=query_vector,
             limit=limit,
         )
@@ -131,8 +123,19 @@ class QdrantStore:
         return profiles
 
 
-def get_qdrant_store() -> QdrantStore:
+def get_long_term_memory() -> LongTermMemory:
     """Factory function."""
-    host = os.getenv("QDRANT_HOST", "localhost")
-    port = int(os.getenv("QDRANT_PORT", "6333"))
-    return QdrantStore(host=host, port=port)
+    return LongTermMemory()
+
+
+# Convenience functions for backward compatibility or easy access
+def load_user_profile(user_id: str) -> UserProfile:
+    """Load a user's profile."""
+    memory = get_long_term_memory()
+    return memory.get_profile(user_id)
+
+
+def save_user_profile(user_id: str, profile: UserProfile) -> bool:
+    """Save a user's profile."""
+    memory = get_long_term_memory()
+    return memory.save_profile(user_id, profile)

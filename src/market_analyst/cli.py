@@ -13,8 +13,7 @@ import uuid
 from dotenv import load_dotenv
 
 from market_analyst.constants import DEFAULT_MODEL_KEY, MODEL_ENV_VAR, MODEL_MAP
-from market_analyst.memory.checkpointer import get_checkpointer
-from market_analyst.memory.profile import get_profile_store
+from market_analyst.memory import get_checkpointer, get_long_term_memory
 from market_analyst.nodes.reporter import format_report_for_display
 from market_analyst.schemas import ExecutionMode
 from market_analyst.workflows.analysis_workflow import (
@@ -226,7 +225,7 @@ def set_user_profile(args):
     """Set user profile preferences in Qdrant."""
 
     try:
-        store = get_profile_store()
+        store = get_long_term_memory()
 
         # Get existing profile or create new
         profile = store.get_profile(args.user_id)
