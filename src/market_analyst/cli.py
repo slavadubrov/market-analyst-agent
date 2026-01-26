@@ -12,8 +12,12 @@ import uuid
 
 from dotenv import load_dotenv
 
-from market_analyst.agent import approve_and_publish, create_graph, run_analysis
-from market_analyst.combined_workflow import (
+from market_analyst.workflows.analysis_workflow import (
+    approve_and_publish,
+    create_graph,
+    run_analysis,
+)
+from market_analyst.workflows.combined_workflow import (
     approve_combined_report,
     approve_combined_trade,
     run_combined_analysis,
@@ -23,7 +27,7 @@ from market_analyst.memory.checkpointer import get_checkpointer
 from market_analyst.memory.profile import get_profile_store
 from market_analyst.nodes.reporter import format_report_for_display
 from market_analyst.schemas import ExecutionMode
-from market_analyst.trade_workflow import approve_trade, run_trade
+from market_analyst.workflows.trade_workflow import approve_trade, run_trade
 
 
 def main():

@@ -1,4 +1,4 @@
-"""Main LangGraph agent workflow.
+"""Analysis workflow: Deep Research and Flash Briefing.
 
 This module defines the complete Market Analyst Agent graph with:
 - Router for intent classification (deep research vs flash briefing)
