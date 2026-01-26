@@ -17,7 +17,7 @@ from langchain_core.messages import HumanMessage
 from langgraph.checkpoint.postgres import PostgresSaver
 from langgraph.graph import END, START, StateGraph
 
-from market_analyst.memory.profile import load_user_profile
+from market_analyst.memory import load_user_profile
 from market_analyst.nodes.executor import executor_node
 from market_analyst.nodes.planner import planner_node
 from market_analyst.nodes.reporter import reporter_node
@@ -219,7 +219,7 @@ def run_analysis(
     Returns:
         Final state with draft report
     """
-    # Load user profile from Redis
+    # Load user profile from Qdrant
     user_profile = load_user_profile(user_id)
 
     # Create initial state

@@ -23,7 +23,7 @@ This project showcases how to build a sophisticated AI agent that can research s
 - 🔄 **ReAct Execution**: Thought-Action-Observation loop for thorough analysis
 - ⚡ **ReWOO Mode**: Fast, token-efficient snapshots with parallel tool execution
 - 💾 **PostgreSQL Checkpointing**: Pause and resume mid-analysis
-- 🧑‍💼 **User Profiles**: Redis-backed long-term memory for preferences
+- 🧠 **User Profiles & Knowledge**: Qdrant-backed long-term memory (Vector DB)
 - ✋ **Human-in-the-Loop**: Approval required before publishing reports
 - 🐳 **Containerized**: Docker Compose for production deployment
 
@@ -94,28 +94,29 @@ POSTGRES_DB=market_analyst
 POSTGRES_USER=analyst
 POSTGRES_PASSWORD=analyst_pass
 
-# Redis connection (defaults work with docker-compose)
-REDIS_HOST=localhost
-REDIS_PORT=6379
+
+# Qdrant connection (defaults work with docker-compose)
+QDRANT_HOST=localhost
+QDRANT_PORT=6333
 ```
 
-### Step 4: Set Up PostgreSQL and Redis
+### Step 4: Set Up PostgreSQL and Qdrant
 
-The agent uses **PostgreSQL** for checkpointing (pause/resume) and **Redis** for user profile memory. You have three options:
+The agent uses **PostgreSQL** for checkpointing (pause/resume) and **Qdrant** for user profile memory.
 
 #### Option A: Using Docker Compose (Recommended)
 
 The easiest way to run both services:
 
 ```bash
-# Start PostgreSQL and Redis in the background
-docker compose -f docker/docker-compose.yml --env-file .env up -d postgres redis
+# Start PostgreSQL and Qdrant in the background
+docker compose -f docker/docker-compose.yml --env-file .env up -d postgres qdrant
 
 # Verify services are running
 docker compose -f docker/docker-compose.yml --env-file .env ps
 ```
 
-Both services will be available at their default ports (`localhost:5432` for PostgreSQL, `localhost:6379` for Redis).
+Both services will be available at their default ports (`localhost:5432` for PostgreSQL, `localhost:6333` for Qdrant).
 
 #### Option B: Using Standalone Docker Containers
 
@@ -132,12 +133,6 @@ docker run -d \
   -v market_analyst_pgdata:/var/lib/postgresql/data \
   postgres:16-alpine
 
-# Start Redis
-docker run -d \
-  --name market-analyst-redis \
-  -p 6379:6379 \
-  -v market_analyst_redis:/data \
-  redis:7-alpine
 ```
 
 #### Option C: Using Native Installations
@@ -155,9 +150,6 @@ psql market_analyst -c "CREATE USER analyst WITH PASSWORD 'analyst_pass';"
 psql market_analyst -c "GRANT ALL PRIVILEGES ON DATABASE market_analyst TO analyst;"
 psql market_analyst -c "GRANT ALL ON SCHEMA public TO analyst;"
 
-# Install and start Redis
-brew install redis
-brew services start redis
 ```
 
 **Ubuntu/Debian:**
@@ -172,9 +164,6 @@ sudo -u postgres psql -c "CREATE DATABASE market_analyst;"
 sudo -u postgres psql -c "CREATE USER analyst WITH PASSWORD 'analyst_pass';"
 sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE market_analyst TO analyst;"
 
-# Install Redis
-sudo apt install redis-server
-sudo systemctl start redis-server
 ```
 
 ---
@@ -183,7 +172,7 @@ sudo systemctl start redis-server
 
 ### Quick Test (No Persistence)
 
-Run without PostgreSQL/Redis to test basic functionality:
+Run without PostgreSQL/Qdrant to test basic functionality:
 
 ```bash
 uv run python -m market_analyst.cli "Analyze NVDA stock" --no-persist
@@ -191,7 +180,7 @@ uv run python -m market_analyst.cli "Analyze NVDA stock" --no-persist
 
 ### Full Mode (With Persistence)
 
-With PostgreSQL and Redis running:
+With PostgreSQL and Qdrant running:
 
 ```bash
 uv run python -m market_analyst.cli "Analyze NVDA stock"
@@ -262,7 +251,7 @@ uv run market-analyst "Analyze NVDA for investment potential"
 ### Set User Profile
 
 ```bash
-# Set risk tolerance (persists in Redis)
+# Set risk tolerance (persists in Qdrant)
 uv run market-analyst --set-profile --risk-tolerance conservative --horizon long
 
 # Future analyses will consider this profile
@@ -383,7 +372,7 @@ This project is the **demo companion** for the article series. Each part of the 
 | Article | Concepts Covered | Demo Implementation |
 |---------|-----------------|---------------------|
 | **Part 1: Cognitive Engine** | Reasoning loops: ReAct vs ReWOO vs Plan-and-Execute | `router.py` classifies intent → `planner.py` + `executor.py` (ReAct) or `rewoo_*.py` (ReWOO) |
-| **Part 2: The Cortex** | State management, short-term vs long-term memory, checkpointing | PostgreSQL for `interrupt`/resume, Redis for user profiles |
+| **Part 2: The Cortex** | State management, short-term vs long-term memory, checkpointing | PostgreSQL for `interrupt`/resume, Qdrant for LTM |
 | **Part 3: Tool Ergonomics** | ACI design, Pydantic validation, structured outputs | `tools/` with `get_stock_info`, `search_news`, `calculate_metrics` |
 | **Part 4: Human-in-the-Loop** | Guardian pattern, HITL escalation, policy automation | `guardian.py` (deterministic) + `trade_workflow.py` (HITL demo) |
 | **Part 5: Production** | Container deployment, serverless traps, observability | `docker/docker-compose.yml` |
@@ -405,8 +394,8 @@ All environment variables (set in `.env`):
 | `POSTGRES_DB` | ❌ | PostgreSQL database name | `market_analyst` |
 | `POSTGRES_USER` | ❌ | PostgreSQL username | `analyst` |
 | `POSTGRES_PASSWORD` | ❌ | PostgreSQL password | `analyst_pass` |
-| `REDIS_HOST` | ❌ | Redis host | `localhost` |
-| `REDIS_PORT` | ❌ | Redis port | `6379` |
+| `QDRANT_HOST` | ❌ | Qdrant host | `localhost` |
+| `QDRANT_PORT` | ❌ | Qdrant port | `6333` |
 
 ---
 
@@ -425,15 +414,6 @@ docker compose -f docker/docker-compose.yml logs postgres
 psql -h localhost -U analyst -d market_analyst -c "SELECT 1;"
 ```
 
-### Redis Connection Issues
-
-```bash
-# Check if Redis is running
-docker compose -f docker/docker-compose.yml ps redis
-
-# Test connection
-redis-cli ping  # Should return "PONG"
-```
 
 ### API Key Issues
 
