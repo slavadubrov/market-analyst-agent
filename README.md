@@ -120,11 +120,9 @@ QDRANT_HOST=localhost
 QDRANT_PORT=6333
 ```
 
-### Step 4: Set Up PostgreSQL and Qdrant
+### Step 4: Set Up PostgreSQL and Qdrant Using Docker Compose
 
 The agent uses **PostgreSQL** for checkpointing (pause/resume) and **Qdrant** for user profile memory.
-
-#### Option A: Using Docker Compose (Recommended)
 
 The easiest way to run both services:
 
@@ -137,54 +135,6 @@ docker compose -f docker/docker-compose.yml --env-file .env ps
 ```
 
 Both services will be available at their default ports (`localhost:5432` for PostgreSQL, `localhost:6333` for Qdrant).
-
-#### Option B: Using Standalone Docker Containers
-
-If you prefer running containers separately:
-
-```bash
-# Start PostgreSQL
-docker run -d \
-  --name market-analyst-postgres \
-  -e POSTGRES_DB=market_analyst \
-  -e POSTGRES_USER=analyst \
-  -e POSTGRES_PASSWORD=analyst_pass \
-  -p 5432:5432 \
-  -v market_analyst_pgdata:/var/lib/postgresql/data \
-  postgres:16-alpine
-
-```
-
-#### Option C: Using Native Installations
-
-**macOS (Homebrew):**
-
-```bash
-# Install and start PostgreSQL
-brew install postgresql@16
-brew services start postgresql@16
-
-# Create the database and user
-createdb market_analyst
-psql market_analyst -c "CREATE USER analyst WITH PASSWORD 'analyst_pass';"
-psql market_analyst -c "GRANT ALL PRIVILEGES ON DATABASE market_analyst TO analyst;"
-psql market_analyst -c "GRANT ALL ON SCHEMA public TO analyst;"
-
-```
-
-**Ubuntu/Debian:**
-
-```bash
-# Install PostgreSQL
-sudo apt update
-sudo apt install postgresql postgresql-contrib
-
-# Create database and user
-sudo -u postgres psql -c "CREATE DATABASE market_analyst;"
-sudo -u postgres psql -c "CREATE USER analyst WITH PASSWORD 'analyst_pass';"
-sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE market_analyst TO analyst;"
-
-```
 
 ---
 
@@ -249,7 +199,22 @@ docker compose -f docker/docker-compose.yml up --build
 
 # In another terminal, run an analysis
 docker compose -f docker/docker-compose.yml exec app python -m market_analyst.cli "Analyze NVDA stock"
+
+### Web Interface (Gradio)
+
+For a more interactive experience, you can use the web interface:
+
+```bash
+# Start the Gradio UI
+make run-ui
 ```
+
+This will launch the app at `http://localhost:7860`, where you can:
+
+- Configure your profile
+- Run analyses and see reports
+- Execute trades with Guardian checks
+- Run the combined workflow
 
 ---
 
@@ -360,7 +325,7 @@ A safe environment for executing sensitive actions. The **Guardian** acts as a p
 
 chains the Analysis and Trade workflows into a complete end-to-end experience:
 
-![Combined Architecture](docs/architecture.svg)
+![Combined Architecture](docs/combined_workflow.svg)
 
 1. **Analysis**: The agent researches a stock and generates a report.
 2. **Report Approval**: You review and approve the report (HITL).
@@ -433,7 +398,6 @@ docker compose -f docker/docker-compose.yml logs postgres
 # Test connection
 psql -h localhost -U analyst -d market_analyst -c "SELECT 1;"
 ```
-
 
 ### API Key Issues
 
