@@ -1,7 +1,5 @@
 import os
 
-import pytest
-
 from market_analyst.memory.hot import get_checkpointer, list_thread_history
 from market_analyst.memory.long import LongTermMemory
 from market_analyst.memory.postgres_store import (
@@ -59,7 +57,7 @@ def test_list_thread_history(mocker):
 
 def test_long_term_memory_get_profile(mocker):
     """Test retrieving user profile."""
-    mock_ensure = mocker.patch("market_analyst.memory.long.ensure_collection")
+    _ = mocker.patch("market_analyst.memory.long.ensure_collection")
     mock_get_client = mocker.patch("market_analyst.memory.long.get_client")
 
     mock_client = mocker.MagicMock()
@@ -81,7 +79,7 @@ def test_long_term_memory_get_profile(mocker):
 
 def test_long_term_memory_save_profile(mocker):
     """Test saving user profile."""
-    mock_ensure = mocker.patch("market_analyst.memory.long.ensure_collection")
+    _ = mocker.patch("market_analyst.memory.long.ensure_collection")
     mock_get_client = mocker.patch("market_analyst.memory.long.get_client")
 
     mock_client = mocker.MagicMock()
@@ -128,7 +126,7 @@ def test_get_postgres_saver(mocker):
     mock_pool = mocker.patch("market_analyst.memory.postgres_store.ConnectionPool")
     mock_saver = mocker.patch("market_analyst.memory.postgres_store.PostgresSaver")
 
-    saver = get_postgres_saver()
+    _ = get_postgres_saver()
     mock_pool.assert_called_once()
     mock_saver.assert_called_once()
     mock_saver.return_value.setup.assert_called_once()
@@ -149,6 +147,6 @@ def test_get_redis_saver(mocker):
     mock_redis = mocker.patch("market_analyst.memory.redis_store.Redis")
     mock_saver = mocker.patch("market_analyst.memory.redis_store.RedisSaver")
 
-    saver = get_redis_saver()
+    _ = get_redis_saver()
     mock_redis.from_url.assert_called_once()
     mock_saver.assert_called_once()

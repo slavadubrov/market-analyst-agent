@@ -22,8 +22,6 @@ from market_analyst.workflows.analysis_workflow import (
     run_analysis,
 )
 from market_analyst.workflows.combined_workflow import (
-    approve_combined_report,
-    approve_combined_trade,
     run_combined_analysis,
 )
 from market_analyst.workflows.trade_workflow import approve_trade, run_trade
@@ -53,37 +51,23 @@ Examples:
     )
 
     # Main arguments
-    parser.add_argument(
-        "query", nargs="?", help="Stock analysis query (e.g., 'Analyze NVDA')"
-    )
+    parser.add_argument("query", nargs="?", help="Stock analysis query (e.g., 'Analyze NVDA')")
     parser.add_argument("--thread-id", help="Thread ID for resuming a conversation")
-    parser.add_argument(
-        "--user-id", default="default", help="User ID for profile management"
-    )
+    parser.add_argument("--user-id", default="default", help="User ID for profile management")
 
     # Profile management
-    parser.add_argument(
-        "--set-profile", action="store_true", help="Set user profile preferences"
-    )
+    parser.add_argument("--set-profile", action="store_true", help="Set user profile preferences")
     parser.add_argument(
         "--risk-tolerance",
         choices=["conservative", "moderate", "aggressive"],
         help="Risk tolerance level",
     )
-    parser.add_argument(
-        "--horizon", choices=["short", "medium", "long"], help="Investment time horizon"
-    )
+    parser.add_argument("--horizon", choices=["short", "medium", "long"], help="Investment time horizon")
 
     # Execution modes
-    parser.add_argument(
-        "--resume", action="store_true", help="Resume a paused analysis"
-    )
-    parser.add_argument(
-        "--approve", action="store_true", help="Approve the draft report and publish"
-    )
-    parser.add_argument(
-        "--no-persist", action="store_true", help="Run without database persistence"
-    )
+    parser.add_argument("--resume", action="store_true", help="Resume a paused analysis")
+    parser.add_argument("--approve", action="store_true", help="Approve the draft report and publish")
+    parser.add_argument("--no-persist", action="store_true", help="Run without database persistence")
     parser.add_argument(
         "--model",
         choices=list(MODEL_MAP.keys()),
@@ -152,9 +136,7 @@ Examples:
     )
 
     # Debugging
-    parser.add_argument(
-        "--verbose", "-v", action="store_true", help="Enable verbose output"
-    )
+    parser.add_argument("--verbose", "-v", action="store_true", help="Enable verbose output")
     parser.add_argument(
         "--show-plan",
         action="store_true",
@@ -313,9 +295,7 @@ def run_new_analysis(args):
                 print("\nTo approve and publish:")
                 print(f"  uv run market-analyst --approve --thread-id {thread_id}")
                 print("\nTo edit and approve:")
-                print(
-                    f"  uv run market-analyst --approve --thread-id {thread_id} --edit-recommendation hold"
-                )
+                print(f"  uv run market-analyst --approve --thread-id {thread_id} --edit-recommendation hold")
         else:
             print("\n✅ Analysis complete!")
             if result.get("draft_report"):
@@ -453,13 +433,9 @@ def run_trade_command(args):
                 print("\n⚠️  Running with --no-persist: approval workflow disabled")
             else:
                 print("\nTo approve this trade:")
-                print(
-                    f"  uv run market-analyst --approve-trade --thread-id {thread_id}"
-                )
+                print(f"  uv run market-analyst --approve-trade --thread-id {thread_id}")
                 print("\nTo approve with modified amount:")
-                print(
-                    f"  uv run market-analyst --approve-trade --thread-id {thread_id} --modify-amount 9000"
-                )
+                print(f"  uv run market-analyst --approve-trade --thread-id {thread_id} --modify-amount 9000")
                 print("\nTo reject this trade:")
                 print(f"  uv run market-analyst --reject-trade --thread-id {thread_id}")
         else:
@@ -566,9 +542,7 @@ def run_combined_command(args):
                 print("   (Run without --no-persist to enable approval workflow)")
             else:
                 print("\nTo approve the report and continue to trade:")
-                print(
-                    f"  uv run market-analyst --approve --combined --thread-id {thread_id}"
-                )
+                print(f"  uv run market-analyst --approve --combined --thread-id {thread_id}")
 
         elif result.get("requires_trade_approval"):
             print("\n" + "=" * 60)
@@ -584,9 +558,7 @@ def run_combined_command(args):
                 print("\n⚠️  Running with --no-persist: approval workflow disabled")
             else:
                 print("\nTo approve this trade:")
-                print(
-                    f"  uv run market-analyst --approve-trade --thread-id {thread_id}"
-                )
+                print(f"  uv run market-analyst --approve-trade --thread-id {thread_id}")
                 print("\nTo reject this trade:")
                 print(f"  uv run market-analyst --reject-trade --thread-id {thread_id}")
 

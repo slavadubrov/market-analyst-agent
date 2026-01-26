@@ -1,8 +1,6 @@
 import json
 import os
 
-import pytest
-
 from market_analyst.tools.search import (
     NewsSearchResult,
     search_competitors,

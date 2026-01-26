@@ -17,15 +17,9 @@ class ExecutionMode(str, Enum):
 class UserProfile(BaseModel):
     """User investment profile stored in Qdrant for cross-thread memory."""
 
-    risk_tolerance: Literal["conservative", "moderate", "aggressive"] = Field(
-        default="moderate", description="User's risk tolerance level"
-    )
-    investment_horizon: Literal["short", "medium", "long"] = Field(
-        default="medium", description="Investment time horizon"
-    )
-    preferred_sectors: list[str] = Field(
-        default_factory=list, description="Preferred industry sectors"
-    )
+    risk_tolerance: Literal["conservative", "moderate", "aggressive"] = Field(default="moderate", description="User's risk tolerance level")
+    investment_horizon: Literal["short", "medium", "long"] = Field(default="medium", description="Investment time horizon")
+    preferred_sectors: list[str] = Field(default_factory=list, description="Preferred industry sectors")
     notes: str = Field(default="", description="Additional user notes/preferences")
 
 
@@ -55,9 +49,7 @@ class PlanStep(BaseModel):
 
     step_number: int
     description: str
-    tool_hint: str | None = Field(
-        default=None, description="Suggested tool to use for this step"
-    )
+    tool_hint: str | None = Field(default=None, description="Suggested tool to use for this step")
     completed: bool = False
     result: str | None = None
 

@@ -8,8 +8,6 @@ These tests demonstrate the Guardian policy layer in action:
 Run with: uv run pytest tests/test_guardian_demo.py -v
 """
 
-import pytest
-
 from market_analyst.nodes.guardian import (
     AUTO_APPROVE_THRESHOLD,
     HIGH_VALUE_THRESHOLD,
@@ -187,7 +185,7 @@ class TestPolicyThresholds:
 
         result = check_policies(trade)
         assert result.decision == GuardianDecision.ESCALATE
-        print(f"\n⏸️  $501: escalated for review")
+        print("\n⏸️  $501: escalated for review")
 
     def test_exactly_at_high_value_threshold(self):
         """Trade at exactly $10,000 should be escalated (default_review)."""
@@ -215,7 +213,7 @@ class TestPolicyThresholds:
         result = check_policies(trade)
         assert result.decision == GuardianDecision.ESCALATE
         assert result.policy_name == "high_value_threshold"
-        print(f"\n⏸️  $10,001: escalated (high_value_threshold)")
+        print("\n⏸️  $10,001: escalated (high_value_threshold)")
 
 
 if __name__ == "__main__":

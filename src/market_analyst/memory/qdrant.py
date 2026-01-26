@@ -26,7 +26,5 @@ def ensure_collection(
     if not client.collection_exists(collection_name):
         client.create_collection(
             collection_name=collection_name,
-            vectors_config=models.VectorParams(
-                size=vector_size, distance=models.Distance.COSINE
-            ),
+            vectors_config=models.VectorParams(size=vector_size, distance=models.Distance.COSINE),
         )

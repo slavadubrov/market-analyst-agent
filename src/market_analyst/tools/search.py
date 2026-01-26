@@ -7,7 +7,7 @@ without the noise of traditional search engines.
 import os
 
 from langchain_core.tools import tool
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from tavily import TavilyClient
 
 
@@ -46,9 +46,7 @@ def _search_news_impl(
                 {
                     "title": item.get("title", ""),
                     "url": item.get("url", ""),
-                    "snippet": item.get("content", "")[
-                        :500
-                    ],  # Truncate for token efficiency
+                    "snippet": item.get("content", "")[:500],  # Truncate for token efficiency
                     "score": item.get("score", 0),
                 }
             )

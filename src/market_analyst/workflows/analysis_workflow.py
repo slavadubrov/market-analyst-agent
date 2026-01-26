@@ -152,9 +152,7 @@ def publish_node(state: AgentState) -> dict:
 
     # Generate filename with ticker, mode, and timestamp
     report = state.draft_report
-    mode_suffix = (
-        "flash" if state.execution_mode == ExecutionMode.FLASH_BRIEFING else "deep"
-    )
+    mode_suffix = "flash" if state.execution_mode == ExecutionMode.FLASH_BRIEFING else "deep"
     timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
     filename = f"{report.ticker}_{mode_suffix}_{timestamp}.md"
     filepath = reports_dir / filename
@@ -276,9 +274,7 @@ def approve_and_publish(
     current_state = graph.get_state(config)
 
     if not current_state or not current_state.values:
-        raise ValueError(
-            f"No state found for thread {thread_id}. Make sure persistence is enabled when running the analysis."
-        )
+        raise ValueError(f"No state found for thread {thread_id}. Make sure persistence is enabled when running the analysis.")
 
     # Check if we're at the right interrupt point
     next_nodes = current_state.next

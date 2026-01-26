@@ -11,7 +11,7 @@ from typing import Literal
 
 import yfinance as yf
 from langchain_core.tools import tool
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
 class StockPriceResult(BaseModel):
@@ -93,9 +93,7 @@ def get_stock_price(ticker: str) -> StockPriceResult:
 
 
 @tool
-def get_company_metrics(
-    ticker: str, mode: Literal["concise", "detailed"] = "concise"
-) -> CompanyMetricsResult:
+def get_company_metrics(ticker: str, mode: Literal["concise", "detailed"] = "concise") -> CompanyMetricsResult:
     """Get company financial metrics and information.
 
     This tool returns key financial metrics for investment analysis.
@@ -140,9 +138,7 @@ def get_company_metrics(
 
 
 @tool
-def get_price_history(
-    ticker: str, period: Literal["1d", "5d", "1mo", "3mo", "6mo", "1y"] = "1mo"
-) -> PriceHistoryResult:
+def get_price_history(ticker: str, period: Literal["1d", "5d", "1mo", "3mo", "6mo", "1y"] = "1mo") -> PriceHistoryResult:
     """Get historical price data and summary statistics.
 
     Returns a summary of price movement over the specified period.

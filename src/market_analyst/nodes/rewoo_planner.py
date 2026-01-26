@@ -71,12 +71,8 @@ def rewoo_planner_node(state: AgentState) -> dict:
     # Get user's original query for context
     user_messages = [m for m in state.messages if isinstance(m, HumanMessage)]
     if not user_messages:
-        user_messages = [
-            m for m in state.messages if hasattr(m, "type") and m.type == "human"
-        ]
-    query = (
-        user_messages[-1].content if user_messages else f"Quick analysis of {ticker}"
-    )
+        user_messages = [m for m in state.messages if hasattr(m, "type") and m.type == "human"]
+    query = user_messages[-1].content if user_messages else f"Quick analysis of {ticker}"
 
     messages = [
         SystemMessage(content=REWOO_PLANNER_PROMPT),
@@ -99,11 +95,7 @@ Output a list of tool calls with:
 
         print(f"\n⚡ ReWOO Plan created with {len(result.steps)} parallel tool calls:")
         for step in result.steps:
-            deps = (
-                f" (depends on: {', '.join(step.depends_on)})"
-                if step.depends_on
-                else ""
-            )
+            deps = f" (depends on: {', '.join(step.depends_on)})" if step.depends_on else ""
             print(f"   {step.step_id} = {step.tool_name}({step.tool_args}){deps}")
 
         return {

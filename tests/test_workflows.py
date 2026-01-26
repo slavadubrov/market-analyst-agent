@@ -1,5 +1,3 @@
-import pytest
-
 from market_analyst.schemas import (
     AgentState,
     DraftReport,
@@ -55,9 +53,7 @@ def test_route_after_executor(mocker):
 
 def test_create_graph_compilation_smoke(mocker):
     """Smoke test for graph creation."""
-    mock_graph_cls = mocker.patch(
-        "market_analyst.workflows.analysis_workflow.StateGraph"
-    )
+    mock_graph_cls = mocker.patch("market_analyst.workflows.analysis_workflow.StateGraph")
     mock_graph = mock_graph_cls.return_value
     mock_graph.compile.return_value = "compiled_graph"
 
@@ -98,9 +94,7 @@ def test_route_after_guardian(mocker):
     state = mocker.MagicMock(spec=AgentState)
 
     # Approve
-    state.guardian_result = GuardianResult(
-        decision=GuardianDecision.APPROVE, reason="Ok", policy_name="safe_trade"
-    )
+    state.guardian_result = GuardianResult(decision=GuardianDecision.APPROVE, reason="Ok", policy_name="safe_trade")
     assert route_after_guardian(state) == "execute"
 
     # Escalate
@@ -112,9 +106,7 @@ def test_route_after_guardian(mocker):
     assert route_after_guardian(state) == "escalate"
 
     # Reject
-    state.guardian_result = GuardianResult(
-        decision=GuardianDecision.REJECT, reason="Bad", policy_name="dangerous_trade"
-    )
+    state.guardian_result = GuardianResult(decision=GuardianDecision.REJECT, reason="Bad", policy_name="dangerous_trade")
     assert route_after_guardian(state) == "end"
 
     # None (should end)
@@ -161,9 +153,7 @@ def test_create_trade_from_report_node(mocker):
 
 def test_create_combined_graph_smoke(mocker):
     """Smoke test for combined graph."""
-    mock_graph_cls = mocker.patch(
-        "market_analyst.workflows.combined_workflow.StateGraph"
-    )
+    mock_graph_cls = mocker.patch("market_analyst.workflows.combined_workflow.StateGraph")
     mock_graph = mock_graph_cls.return_value
     mock_graph.compile.return_value = "compiled_graph"
     create_combined_graph()
