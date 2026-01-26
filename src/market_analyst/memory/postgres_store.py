@@ -1,8 +1,9 @@
-"""PostgreSQL connection management."""
+"""PostgreSQL connection and checkpointer management."""
 
 import atexit
 import os
 
+from langgraph.checkpoint.postgres import PostgresSaver
 from psycopg_pool import ConnectionPool
 
 
@@ -48,3 +49,15 @@ def get_connection_pool() -> ConnectionPool:
             kwargs={"autocommit": True},  # Important for setup() and checkpointing
         )
     return _connection_pool
+
+
+def get_postgres_saver() -> PostgresSaver:
+    """Create and configure a Postgres checkpointer.
+
+    Returns:
+        Configured PostgresSaver instance
+    """
+    pool = get_connection_pool()
+    checkpointer = PostgresSaver(pool)
+    checkpointer.setup()
+    return checkpointer

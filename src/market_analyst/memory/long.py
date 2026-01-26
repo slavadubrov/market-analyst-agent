@@ -7,7 +7,6 @@ This module provides the interface for:
 """
 
 import uuid
-from typing import List
 
 from qdrant_client.http import models
 
@@ -29,7 +28,7 @@ class LongTermMemory:
         self.vector_size = VECTOR_SIZE
         self.collection_name = DEFAULT_COLLECTION_NAME
 
-    def _get_dummy_vector(self) -> List[float]:
+    def _get_dummy_vector(self) -> list[float]:
         """Generate a dummy vector for when we don't have an embedding model yet.
 
         TODO: Integrate a real embedding model (e.g. fastembed or OpenAI/Anthropic).
@@ -103,8 +102,8 @@ class LongTermMemory:
         return profile
 
     def search_profiles(
-        self, query_vector: List[float], limit: int = 5
-    ) -> List[UserProfile]:
+        self, query_vector: list[float], limit: int = 5
+    ) -> list[UserProfile]:
         """Search profiles by vector similarity."""
         results = self.client.search(
             collection_name=self.collection_name,

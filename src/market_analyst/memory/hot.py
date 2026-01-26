@@ -1,4 +1,4 @@
-"""Hot memory (short-term state) management using PostgreSQL.
+"""Hot memory (short-term state) management using PostgreSQL or Redis.
 
 This module enables:
 1. Pause and resume mid-analysis
@@ -6,15 +6,17 @@ This module enables:
 3. Time-travel debugging
 """
 
+import os
 from contextlib import contextmanager
 
-from langgraph.checkpoint.postgres import PostgresSaver
+from langgraph.checkpoint.base import BaseCheckpointSaver
 
-from market_analyst.memory.postgres import get_connection_pool
+from market_analyst.memory.postgres_store import get_postgres_saver
+from market_analyst.memory.redis_store import get_redis_saver
 
 
-def get_checkpointer() -> PostgresSaver:
-    """Create and configure a PostgreSQL checkpointer.
+def get_checkpointer() -> BaseCheckpointSaver:
+    """Create and configure a checkpointer (Postgres or Redis).
 
     The checkpointer stores:
     - Full agent state at each step
@@ -23,13 +25,15 @@ def get_checkpointer() -> PostgresSaver:
     - Plan progress
 
     Returns:
-        Configured PostgresSaver instance
+        Configured BaseCheckpointSaver instance
     """
-    pool = get_connection_pool()
-    checkpointer = PostgresSaver(pool)
-    checkpointer.setup()
+    provider = os.getenv("HOT_MEMORY_PROVIDER", "postgres").lower()
 
-    return checkpointer
+    if provider == "redis":
+        return get_redis_saver()
+
+    # Default to Postgres
+    return get_postgres_saver()
 
 
 @contextmanager
@@ -48,14 +52,14 @@ def checkpointer_context():
         pass  # Pool manages connection lifecycle, handled by postgres module
 
 
-def get_thread_state(thread_id: str, checkpointer: PostgresSaver) -> dict | None:
+def get_thread_state(thread_id: str, checkpointer: BaseCheckpointSaver) -> dict | None:
     """Retrieve the latest state for a thread.
 
     Useful for debugging or resuming a conversation.
 
     Args:
         thread_id: The thread identifier
-        checkpointer: PostgresSaver instance
+        checkpointer: BaseCheckpointSaver instance
 
     Returns:
         The latest state dict, or None if not found
@@ -68,7 +72,7 @@ def get_thread_state(thread_id: str, checkpointer: PostgresSaver) -> dict | None
 
 
 def list_thread_history(
-    thread_id: str, checkpointer: PostgresSaver, limit: int = 10
+    thread_id: str, checkpointer: BaseCheckpointSaver, limit: int = 10
 ) -> list:
     """List checkpoint history for a thread.
 
@@ -76,7 +80,7 @@ def list_thread_history(
 
     Args:
         thread_id: The thread identifier
-        checkpointer: PostgresSaver instance
+        checkpointer: BaseCheckpointSaver instance
         limit: Maximum number of checkpoints to return
 
     Returns:

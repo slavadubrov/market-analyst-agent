@@ -17,7 +17,7 @@ from market_analyst.memory.long import (
     load_user_profile,
     save_user_profile,
 )
-from market_analyst.memory.postgres import get_connection_string
+from market_analyst.memory.postgres_store import get_connection_string
 
 __all__ = [
     # Hot Memory
