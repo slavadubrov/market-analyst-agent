@@ -21,7 +21,7 @@ from market_analyst.schemas import (
     TradeAction,
     TradeRequest,
 )
-from market_analyst.trade_workflow import create_trade_graph
+from market_analyst.workflows.trade_workflow import create_trade_graph
 
 
 class TestGuardianPolicies:
