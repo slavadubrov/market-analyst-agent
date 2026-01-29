@@ -128,7 +128,7 @@ The easiest way to run both services:
 
 ```bash
 # Start PostgreSQL and Qdrant in the background
-docker compose -f docker/docker-compose.yml --env-file .env up -d postgres qdrant
+docker compose -f docker/docker-compose.yml --env-file .env up -d postgres qdrant redis
 
 # Verify services are running
 docker compose -f docker/docker-compose.yml --env-file .env ps

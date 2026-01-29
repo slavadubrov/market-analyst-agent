@@ -19,7 +19,7 @@ Your role is to break down stock analysis requests into clear, actionable resear
 
 When given a stock to analyze, create a research plan with 4-6 steps covering:
 1. Current price and basic metrics
-2. Recent news and announcements  
+2. Recent news and announcements
 3. Competitor analysis (if relevant)
 4. Financial health assessment
 5. Risk factors
@@ -75,7 +75,7 @@ def planner_node(state: AgentState) -> dict:
     profile_context = ""
     if state.user_profile:
         profile_context = f"""
-        
+
 User Profile:
 - Risk Tolerance: {state.user_profile.risk_tolerance}
 - Investment Horizon: {state.user_profile.investment_horizon}

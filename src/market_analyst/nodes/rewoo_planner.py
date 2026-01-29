@@ -20,13 +20,13 @@ from market_analyst.schemas import AgentState, ReWOOPlanStep
 
 REWOO_PLANNER_PROMPT = """You are a research analyst creating an efficient data gathering plan.
 
-Your task is to plan ALL tool calls upfront for a quick stock briefing. 
+Your task is to plan ALL tool calls upfront for a quick stock briefing.
 You will NOT see the outputs until the end - plan everything now.
 
 Available tools:
 - get_stock_price(ticker: str) -> Current price and basic info
 - get_company_metrics(ticker: str, mode: str = "concise") -> Financial metrics
-- get_price_history(ticker: str, period: str = "1mo") -> Historical prices  
+- get_price_history(ticker: str, period: str = "1mo") -> Historical prices
 - search_news(query: str) -> Recent news articles
 - search_competitors(ticker: str) -> Competitor analysis
 

@@ -14,6 +14,7 @@ from market_analyst.constants import DEFAULT_MODEL_KEY, MODEL_ENV_VAR, MODEL_MAP
 from market_analyst.memory import get_checkpointer, get_long_term_memory
 from market_analyst.nodes.reporter import format_report_for_display
 from market_analyst.schemas import ExecutionMode
+from market_analyst.utils import get_state_attr
 from market_analyst.workflows.analysis_workflow import (
     approve_and_publish,
     run_analysis,
@@ -28,8 +29,17 @@ from market_analyst.workflows.trade_workflow import approve_trade, run_trade
 load_dotenv()
 
 
-def set_profile(user_id, risk_tolerance, horizon):
-    """Set user profile preferences."""
+def set_profile(user_id: str, risk_tolerance: str | None, horizon: str | None) -> str:
+    """Set user profile preferences in Qdrant.
+
+    Args:
+        user_id: Unique user identifier.
+        risk_tolerance: Risk appetite level (conservative/moderate/aggressive).
+        horizon: Investment time horizon (short/medium/long).
+
+    Returns:
+        Status message confirming update or describing error.
+    """
     try:
         store = get_long_term_memory()
         profile = store.get_profile(user_id)
@@ -45,15 +55,41 @@ def set_profile(user_id, risk_tolerance, horizon):
         return f"⚠️ Could not save to Qdrant: {str(e)}"
 
 
-def format_report_markdown(report):
-    """Format report for Markdown display."""
+def format_report_markdown(report: dict | None) -> str:
+    """Format report for Markdown display.
+
+    Args:
+        report: Report dictionary from analysis workflow.
+
+    Returns:
+        Formatted markdown string or placeholder if no report.
+    """
     if not report:
         return "No report available."
     return format_report_for_display(report)
 
 
-def run_analysis_ui(query, user_id, model, mode, thread_id_input, resume_thread_id):
-    """Run analysis workflow."""
+def run_analysis_ui(
+    query: str,
+    user_id: str,
+    model: str,
+    mode: str,
+    thread_id_input: str,
+    resume_thread_id: str,
+) -> tuple:
+    """Run analysis workflow from the UI.
+
+    Args:
+        query: Stock analysis query (e.g., 'Analyze NVDA').
+        user_id: User identifier for profile lookup.
+        model: Model selection key (e.g., 'sonnet', 'haiku').
+        mode: Execution mode ('auto', 'deep', 'flash').
+        thread_id_input: Optional thread ID for resuming.
+        resume_thread_id: Alternative thread ID for resuming.
+
+    Returns:
+        Tuple of (report_markdown, status_message, thread_id, approval_group_visibility).
+    """
 
     # Use provided thread ID or generate new ones
     if resume_thread_id:
@@ -119,14 +155,7 @@ def approve_report_ui(thread_id):
 
         if result.get("published"):
             state = result.get("state", {})
-            # Handle both dict and object access
-            if hasattr(state, "draft_report"):
-                draft_report = state.draft_report
-            elif isinstance(state, dict):
-                draft_report = state.get("draft_report")
-            else:
-                draft_report = None
-
+            draft_report = get_state_attr(state, "draft_report")
             report_md = format_report_for_display(draft_report) if draft_report else "No report content."
             return f"🎉 Report published successfully!\n\n{report_md}", "Approved"
         else:

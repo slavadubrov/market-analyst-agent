@@ -13,9 +13,11 @@ import uuid
 from dotenv import load_dotenv
 
 from market_analyst.constants import DEFAULT_MODEL_KEY, MODEL_ENV_VAR, MODEL_MAP
+from market_analyst.logging_config import setup_logging
 from market_analyst.memory import get_checkpointer, get_long_term_memory
 from market_analyst.nodes.reporter import format_report_for_display
 from market_analyst.schemas import ExecutionMode
+from market_analyst.utils import get_state_attr
 from market_analyst.workflows.analysis_workflow import (
     approve_and_publish,
     create_graph,
@@ -39,13 +41,13 @@ def main():
 Examples:
   # Run a simple analysis
   market-analyst "Analyze NVDA stock"
-  
+
   # Set user profile first
   market-analyst --set-profile --risk-tolerance conservative
-  
+
   # Resume a previous analysis
   market-analyst --resume --thread-id abc123
-  
+
   # Show help for profile settings
   market-analyst --set-profile --help
         """,
@@ -206,6 +208,7 @@ Examples:
 
 def set_user_profile(args):
     """Set user profile preferences in Qdrant."""
+    logger = setup_logging(args.verbose)
 
     try:
         store = get_long_term_memory()
@@ -224,8 +227,13 @@ def set_user_profile(args):
         print(f"   Risk Tolerance: {profile.risk_tolerance}")
         print(f"   Investment Horizon: {profile.investment_horizon}")
 
+    except (ConnectionError, TimeoutError) as e:
+        logger.warning(f"Could not connect to Qdrant: {e}")
+        print("⚠️  Could not connect to Qdrant (might not be running)")
+        print("   Profile will use defaults")
     except Exception as e:
-        print(f"⚠️  Could not save to Qdrant (might not be running): {e}")
+        logger.error(f"Unexpected error saving profile: {e}", exc_info=args.verbose)
+        print(f"⚠️  Could not save to Qdrant: {e}")
         print("   Profile will use defaults")
 
 
@@ -406,13 +414,7 @@ def approve_report(args):
 
                 # Display the final report
                 state = result.get("state", {})
-                # Handle both dict and object access
-                if hasattr(state, "draft_report"):
-                    draft_report = state.draft_report
-                elif isinstance(state, dict):
-                    draft_report = state.get("draft_report")
-                else:
-                    draft_report = None
+                draft_report = get_state_attr(state, "draft_report")
 
                 if draft_report:
                     print(format_report_for_display(draft_report))

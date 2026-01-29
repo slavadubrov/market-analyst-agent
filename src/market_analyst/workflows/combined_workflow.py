@@ -142,10 +142,10 @@ def publish_node(state: AgentState) -> dict:
 
     content = f"""# {report.title}
 
-**Ticker:** {report.ticker}  
-**Mode:** {mode_suffix.capitalize()} {"(ReWOO)" if mode_suffix == "flash" else "(ReAct)"}  
-**Recommendation:** {report.recommendation.upper().replace("_", " ")}  
-**Confidence:** {report.confidence:.0%}  
+**Ticker:** {report.ticker}
+**Mode:** {mode_suffix.capitalize()} {"(ReWOO)" if mode_suffix == "flash" else "(ReAct)"}
+**Recommendation:** {report.recommendation.upper().replace("_", " ")}
+**Confidence:** {report.confidence:.0%}
 **Generated:** {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 
 ---
