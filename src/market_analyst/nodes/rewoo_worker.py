@@ -5,6 +5,8 @@ This is where the token efficiency comes from - NO LLM calls between tool execut
 """
 
 import concurrent.futures
+from collections.abc import Callable
+from typing import Any
 
 from market_analyst.schemas import AgentState, ReWOOPlanStep
 from market_analyst.tools.search import search_competitors, search_news
@@ -14,8 +16,8 @@ from market_analyst.tools.stock import (
     get_stock_price,
 )
 
-# Tool registry mapping names to functions
-TOOL_REGISTRY: dict[str, callable] = {
+# Tool registry mapping names to functions for ReWOO parallel execution
+TOOL_REGISTRY: dict[str, Callable[..., Any]] = {
     "get_stock_price": get_stock_price,
     "get_company_metrics": get_company_metrics,
     "get_price_history": get_price_history,

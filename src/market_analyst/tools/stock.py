@@ -89,7 +89,7 @@ def get_stock_price(ticker: str) -> StockPriceResult:
             market_state=info.get("marketState", "UNKNOWN"),
         )
     except Exception as e:
-        raise ValueError(f"Failed to get price for {ticker}: {str(e)}")
+        raise ValueError(f"Failed to get price for {ticker}: {str(e)}") from e
 
 
 @tool
@@ -134,7 +134,7 @@ def get_company_metrics(ticker: str, mode: Literal["concise", "detailed"] = "con
 
         return result
     except Exception as e:
-        raise ValueError(f"Failed to get metrics for {ticker}: {str(e)}")
+        raise ValueError(f"Failed to get metrics for {ticker}: {str(e)}") from e
 
 
 @tool
@@ -185,4 +185,4 @@ def get_price_history(ticker: str, period: Literal["1d", "5d", "1mo", "3mo", "6m
             summary=summary,
         )
     except Exception as e:
-        raise ValueError(f"Failed to get history for {ticker}: {str(e)}")
+        raise ValueError(f"Failed to get history for {ticker}: {str(e)}") from e

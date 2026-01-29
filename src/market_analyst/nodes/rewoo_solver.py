@@ -15,7 +15,7 @@ from market_analyst.schemas import AgentState, DraftReport
 
 REWOO_SOLVER_PROMPT = """You are a senior investment analyst creating a quick briefing.
 
-You have gathered the following data through our research tools. 
+You have gathered the following data through our research tools.
 Synthesize this into a concise, actionable flash briefing.
 
 Be concise but comprehensive. This is a QUICK snapshot, not a deep dive.

@@ -60,10 +60,10 @@ def _search_news_impl(
             summary=summary,
         )
 
-    except ImportError:
-        raise ValueError("tavily-python not installed. Run: pip install tavily-python")
+    except ImportError as e:
+        raise ValueError("tavily-python not installed. Run: pip install tavily-python") from e
     except Exception as e:
-        raise ValueError(f"Search failed: {str(e)}")
+        raise ValueError(f"Search failed: {str(e)}") from e
 
 
 @tool

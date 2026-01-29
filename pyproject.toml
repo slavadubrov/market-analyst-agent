@@ -41,10 +41,21 @@ line-length = 160
 target-version = "py313"
 
 [tool.ruff.lint]
-select = ["E", "F", "I"]
+select = ["E", "F", "I", "W", "B", "C"]
 # E: pycodestyle errors
 # F: pyflakes
 # I: isort
+# W: pycodestyle warnings
+# B: flake8-bugbear
+# C: mccabe complexity
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"
+markers = [
+    "integration: marks tests requiring external services",
+    "slow: marks slow-running tests",
+]
 
 [tool.mypy]
 python_version = "3.13"

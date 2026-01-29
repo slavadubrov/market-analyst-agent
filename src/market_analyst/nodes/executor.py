@@ -71,7 +71,7 @@ def executor_node(state: AgentState) -> dict:
 
     # Build context from previous steps
     previous_context = ""
-    for i, step in enumerate(state.plan[: state.current_step_index]):
+    for _i, step in enumerate(state.plan[: state.current_step_index]):
         if step.result:
             previous_context += f"\nStep {step.step_number} ({step.description}): {step.result}\n"
 
@@ -135,7 +135,7 @@ Complete this step and summarize your findings concisely."""
             # Try to extract key data from tool results
             for msg in result["messages"]:
                 if hasattr(msg, "tool_calls"):
-                    for tool_call in msg.tool_calls:
+                    for _tool_call in msg.tool_calls:
                         # Store raw results for later synthesis
                         if research_data.raw_data is None:
                             research_data.raw_data = {}

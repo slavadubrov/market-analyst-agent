@@ -29,10 +29,16 @@ class LongTermMemory:
         self.collection_name = DEFAULT_COLLECTION_NAME
 
     def _get_dummy_vector(self) -> list[float]:
-        """Generate a dummy vector for when we don't have an embedding model yet.
+        """Generate a placeholder vector for storage without embeddings.
 
-        TODO: Integrate a real embedding model (e.g. fastembed or OpenAI/Anthropic).
-        For now, we just want to enable storage and exact retrieval by user_id.
+        Returns a zero vector of the configured size. This enables storage
+        and exact-match retrieval by user_id without requiring an embedding model.
+
+        TODO: Integrate a real embedding model (e.g. fastembed or OpenAI/Anthropic)
+        for semantic search capabilities.
+
+        Returns:
+            Zero vector of length self.vector_size.
         """
         return [0.0] * self.vector_size
 
@@ -91,7 +97,15 @@ class LongTermMemory:
             return False
 
     def update_profile(self, user_id: str, **updates) -> UserProfile:
-        """Partially update a user profile."""
+        """Partially update a user profile with provided fields.
+
+        Args:
+            user_id: Unique user identifier.
+            **updates: Key-value pairs of profile fields to update.
+
+        Returns:
+            Updated UserProfile instance.
+        """
         profile = self.get_profile(user_id)
 
         for key, value in updates.items():

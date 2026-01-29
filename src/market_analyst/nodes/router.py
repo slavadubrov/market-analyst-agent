@@ -20,7 +20,7 @@ Classify the user's request into one of two modes:
 
 1. **deep_research**: For complex, strategic analysis requiring multiple data sources and synthesis.
    - Examples: "Analyze strategic risks", "deep dive into fundamentals", "investment thesis", "competitive analysis"
-   
+
 2. **flash_briefing**: For quick snapshots and simple data retrieval.
    - Examples: "quick snapshot", "current price", "brief update", "what's the latest on", "quick look at"
 
