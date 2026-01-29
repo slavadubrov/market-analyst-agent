@@ -7,6 +7,7 @@ WORKDIR /app
 
 # Copy project files
 COPY pyproject.toml .
+COPY README.md .
 COPY src/ src/
 
 # Install dependencies with uv
@@ -14,5 +15,8 @@ RUN uv venv /app/.venv
 ENV PATH="/app/.venv/bin:$PATH"
 RUN uv pip install -e .
 
-# Default command
-CMD ["python", "-m", "market_analyst.cli"]
+# Expose Gradio port
+EXPOSE 7860
+
+# Default command - Run Gradio UI to keep container alive
+CMD ["python", "-m", "market_analyst.app"]

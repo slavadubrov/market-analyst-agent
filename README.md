@@ -198,7 +198,7 @@ Run everything in containers:
 docker compose -f docker/docker-compose.yml up --build
 
 # In another terminal, run an analysis
-docker compose -f docker/docker-compose.yml exec app python -m market_analyst.cli "Analyze NVDA stock"
+docker compose -f docker/docker-compose.yml exec app python -m market_analyst.cli "Analyze Execon stock"
 
 ### Web Interface (Gradio)
 
