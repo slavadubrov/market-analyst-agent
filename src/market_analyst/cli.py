@@ -14,7 +14,11 @@ from dotenv import load_dotenv
 
 from market_analyst.constants import DEFAULT_MODEL_KEY, MODEL_ENV_VAR, MODEL_MAP
 from market_analyst.logging_config import setup_logging
-from market_analyst.memory import get_checkpointer, get_long_term_memory
+from market_analyst.memory import (
+    get_checkpointer,
+    get_document_memory,
+    get_long_term_memory,
+)
 from market_analyst.nodes.reporter import format_report_for_display
 from market_analyst.schemas import ExecutionMode
 from market_analyst.utils import get_state_attr
@@ -28,6 +32,102 @@ from market_analyst.workflows.combined_workflow import (
     run_combined_analysis,
 )
 from market_analyst.workflows.trade_workflow import approve_trade, run_trade
+
+
+def list_reports_command(args):
+    """List all saved reports from document memory."""
+    try:
+        doc_memory = get_document_memory()
+        reports = doc_memory.list_docs(namespace="research")
+
+        if not reports:
+            print("\n📋 No reports found in document memory")
+            return
+
+        print(f"\n📋 Found {len(reports)} report(s):\n")
+
+        for i, doc in enumerate(reports, 1):
+            metadata = doc.get("metadata", {})
+            ticker = metadata.get("ticker", "N/A")
+            mode = metadata.get("execution_mode", "N/A")
+            created = doc.get("created_at", "N/A")
+
+            print(f"{i}. {doc['key']}")
+            print(f"   Ticker: {ticker}")
+            print(f"   Mode: {mode}")
+            print(f"   Created: {created}")
+            print(f"   Path: {doc['path']}")
+            print()
+
+        print("💡 Use --show-report <key> to view a specific report")
+
+    except Exception as e:
+        print(f"❌ Error listing reports: {e}")
+        if args.verbose:
+            traceback.print_exc()
+        sys.exit(1)
+
+
+def search_reports_command(args):
+    """Search reports by ticker or content."""
+    try:
+        doc_memory = get_document_memory()
+        results = doc_memory.search_docs(namespace="research", query=args.search_reports)
+
+        if not results:
+            print(f"\n🔍 No reports found matching '{args.search_reports}'")
+            return
+
+        print(f"\n🔍 Found {len(results)} matching report(s):\n")
+
+        for i, doc in enumerate(results, 1):
+            metadata = doc.get("metadata", {})
+            ticker = metadata.get("ticker", "N/A")
+            mode = metadata.get("execution_mode", "N/A")
+            created = doc.get("created_at", "N/A")
+
+            print(f"{i}. {doc['key']}")
+            print(f"   Ticker: {ticker}")
+            print(f"   Mode: {mode}")
+            print(f"   Created: {created}")
+            print()
+
+        print("💡 Use --show-report <key> to view a specific report")
+
+    except Exception as e:
+        print(f"❌ Error searching reports: {e}")
+        if args.verbose:
+            traceback.print_exc()
+        sys.exit(1)
+
+
+def show_report_command(args):
+    """Display a specific report by key."""
+    try:
+        doc_memory = get_document_memory()
+        doc = doc_memory.read_doc(namespace="research", key=args.show_report)
+
+        if not doc:
+            print(f"\n❌ Report '{args.show_report}' not found")
+            print("\n💡 Use --list-reports to see available reports")
+            sys.exit(1)
+
+        print("\n" + "=" * 60)
+        print(doc["content"])
+        print("=" * 60)
+
+        # Show metadata
+        metadata = doc.get("metadata", {})
+        if metadata:
+            print("\nMetadata:")
+            for key, value in metadata.items():
+                print(f"  {key}: {value}")
+
+    except Exception as e:
+        print(f"❌ Error displaying report: {e}")
+        if args.verbose:
+            traceback.print_exc()
+        sys.exit(1)
 
 
 def main():
@@ -138,6 +238,23 @@ Examples:
         help="Modify trade amount when approving",
     )
 
+    # Memory and reporting
+    parser.add_argument(
+        "--list-reports",
+        action="store_true",
+        help="List all saved reports from document memory",
+    )
+    parser.add_argument(
+        "--search-reports",
+        metavar="QUERY",
+        help="Search reports by ticker or content",
+    )
+    parser.add_argument(
+        "--show-report",
+        metavar="KEY",
+        help="Display a specific report by key",
+    )
+
     # Debugging
     parser.add_argument("--verbose", "-v", action="store_true", help="Enable verbose output")
     parser.add_argument(
@@ -154,6 +271,19 @@ Examples:
             print("❌ Error: ANTHROPIC_API_KEY environment variable not set")
             print("   Copy .env.example to .env and add your API key")
             sys.exit(1)
+
+    # Handle memory queries
+    if args.list_reports:
+        list_reports_command(args)
+        return
+
+    if args.search_reports:
+        search_reports_command(args)
+        return
+
+    if args.show_report:
+        show_report_command(args)
+        return
 
     # Handle profile setting
     if args.set_profile:

@@ -3,8 +3,14 @@
 Restructured into:
 - hot: Short-term state persistence (PostgreSQL)
 - long: Long-term memory and profiles (Qdrant)
+- document: File-based knowledge accumulation
 """
 
+from market_analyst.memory.document import (
+    DocumentMemory,
+    DocumentMetadata,
+    get_document_memory,
+)
 from market_analyst.memory.hot import (
     checkpointer_context,
     get_checkpointer,
@@ -31,4 +37,8 @@ __all__ = [
     "get_long_term_memory",
     "load_user_profile",
     "save_user_profile",
+    # Document Memory
+    "DocumentMemory",
+    "DocumentMetadata",
+    "get_document_memory",
 ]

@@ -24,6 +24,7 @@ This project showcases how to build a sophisticated AI agent that can research s
 - ⚡ **ReWOO Mode**: Fast, token-efficient snapshots with parallel tool execution
 - 💾 **PostgreSQL Checkpointing**: Pause and resume mid-analysis
 - 🧠 **User Profiles & Knowledge**: Qdrant-backed long-term memory (Vector DB)
+- 📁 **Document Memory**: File-based knowledge accumulation with namespace organization
 - ✋ **Human-in-the-Loop**: Approval required before publishing reports
 - 🐳 **Containerized**: Docker Compose for production deployment
 
@@ -262,6 +263,38 @@ uv run market-analyst --resume --thread-id <thread-id>
 uv run market-analyst --approve --thread-id <thread-id>
 ```
 
+### Document Memory (Retrieve Past Reports)
+
+The agent maintains a structured document memory system for accumulated knowledge:
+
+```bash
+# List all saved reports
+uv run market-analyst --list-reports
+
+# Search reports by ticker or content
+uv run market-analyst --search-reports "NVDA"
+
+# Display a specific report
+uv run market-analyst --show-report "NVDA_deep_2024-01-15_143022"
+```
+
+**Document Memory Organization:**
+
+Reports are stored in `memory/documents/research/` with structured metadata:
+
+```
+memory/documents/
+├── research/          # Market analysis reports
+├── conventions/       # Established patterns and preferences
+├── learnings/         # Episodic knowledge from past runs
+└── user-profiles/     # User-specific configurations
+```
+
+Each document includes:
+- Content (markdown report)
+- Metadata (ticker, execution mode, timestamp, user ID)
+- Search/retrieval interface
+
 ### Guardian Trade Workflow (Article 4 Demo)
 
 The Guardian demonstrates automated policy enforcement with HITL escalation.
@@ -292,6 +325,52 @@ uv run market-analyst --trade --action delete_logs --ticker NVDA --amount 0
 ---
 
 ## Architecture
+
+### Memory Architecture: Three-Tier System
+
+The agent implements a complete memory architecture as described in Article 2:
+
+**1. Hot Memory (Short-term State)**
+- **Technology**: PostgreSQL with LangGraph checkpointing
+- **Purpose**: Pause/resume execution mid-analysis
+- **Retention**: 90 days (configurable)
+- **Use Case**: State snapshots for crash recovery and long-running tasks
+
+**2. Cold Memory (Long-term Semantic)**
+- **Technology**: Qdrant vector database
+- **Purpose**: User profiles, preferences, and semantic search
+- **Retention**: 365 days (configurable)
+- **Use Case**: Profile retrieval, similarity search
+
+**3. Document Memory (Knowledge Accumulation)**
+- **Technology**: File-based JSON storage with namespaces
+- **Purpose**: Structured knowledge organization and retrieval
+- **Retention**: 730 days (configurable)
+- **Use Case**: Report archives, conventions, learnings
+
+**Memory Namespace Organization:**
+
+```
+memory/documents/
+├── research/          # Analysis reports (published after HITL approval)
+├── conventions/       # Established patterns (e.g., report formatting)
+├── learnings/         # Episodic knowledge (successful strategies)
+└── user-profiles/     # User preferences (complementary to Qdrant)
+```
+
+**Example Flow:**
+
+```
+User Query → Hot Memory (checkpoint state)
+          ↓
+          → Cold Memory (load user profile)
+          ↓
+          → Generate Report
+          ↓
+          → Document Memory (save to research/)
+```
+
+### Workflows
 
 This project implements **three distinct workflows** to demonstrate different agentic patterns:
 
@@ -357,7 +436,7 @@ This project is the **demo companion** for the article series. Each part of the 
 | Article | Concepts Covered | Demo Implementation |
 |---------|-----------------|---------------------|
 | **Part 1: Cognitive Engine** | Reasoning loops: ReAct vs ReWOO vs Plan-and-Execute | `router.py` classifies intent → `planner.py` + `executor.py` (ReAct) or `rewoo_*.py` (ReWOO) |
-| **Part 2: The Cortex** | State management, short-term vs long-term memory, checkpointing | PostgreSQL for `interrupt`/resume, Qdrant for LTM |
+| **Part 2: The Cortex** | Three-tier memory: hot/cold/document, checkpointing, retention policies | PostgreSQL (hot), Qdrant (cold), DocumentMemory (file-based knowledge) |
 | **Part 3: Tool Ergonomics** | ACI design, Pydantic validation, structured outputs | `tools/` with `get_stock_info`, `search_news`, `calculate_metrics` |
 | **Part 4: Human-in-the-Loop** | Guardian pattern, HITL escalation, policy automation | `guardian.py` (deterministic) + `trade_workflow.py` (HITL demo) |
 | **Part 5: Production** | Container deployment, serverless traps, observability | `docker/docker-compose.yml` |
