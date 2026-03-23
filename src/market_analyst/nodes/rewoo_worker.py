@@ -11,16 +11,16 @@ from typing import Any
 from market_analyst.schemas import AgentState, ReWOOPlanStep
 from market_analyst.tools.search import search_competitors, search_news
 from market_analyst.tools.stock import (
-    get_company_metrics,
+    get_financials,
     get_price_history,
-    get_stock_price,
+    get_stock_snapshot,
 )
 
 # Tool registry mapping names to functions for ReWOO parallel execution
 TOOL_REGISTRY: dict[str, Callable[..., Any]] = {
-    "get_stock_price": get_stock_price,
-    "get_company_metrics": get_company_metrics,
+    "get_stock_snapshot": get_stock_snapshot,
     "get_price_history": get_price_history,
+    "get_financials": get_financials,
     "search_news": search_news,
     "search_competitors": search_competitors,
 }

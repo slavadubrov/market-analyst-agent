@@ -4,9 +4,9 @@ Generates a complete plan of tool calls upfront with variable placeholders.
 This is the key difference from ReAct - no intermediate LLM calls during execution.
 
 Example output:
-    #E1 = get_stock_price(ticker="NVDA")
+    #E1 = get_stock_snapshot(ticker="NVDA")
     #E2 = search_news(query="NVDA recent news")
-    #E3 = get_company_metrics(ticker="NVDA", mode="concise")
+    #E3 = get_price_history(ticker="NVDA", period="3mo")
 """
 
 import os
@@ -24,11 +24,11 @@ Your task is to plan ALL tool calls upfront for a quick stock briefing.
 You will NOT see the outputs until the end - plan everything now.
 
 Available tools:
-- get_stock_price(ticker: str) -> Current price and basic info
-- get_company_metrics(ticker: str, mode: str = "concise") -> Financial metrics
-- get_price_history(ticker: str, period: str = "1mo") -> Historical prices
-- search_news(query: str) -> Recent news articles
-- search_competitors(ticker: str) -> Competitor analysis
+- get_stock_snapshot(ticker: str) -> Price, volume, market cap, P/E ratio, and summary in one call
+- get_price_history(ticker: str, period: str = "1mo") -> Historical prices with volume data
+- get_financials(ticker: str, statement_type: str = "income") -> Financial statements (income, balance_sheet, cash_flow, all)
+- search_news(query: str) -> Recent news with extracted key points
+- search_competitors(ticker: str) -> Competitor analysis with relative metrics
 
 Create 3-5 tool calls maximum for a quick briefing. Use variable placeholders (#E1, #E2, etc.) to reference outputs.
 

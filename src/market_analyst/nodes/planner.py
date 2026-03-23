@@ -28,7 +28,7 @@ When given a stock to analyze, create a research plan with 4-6 steps covering:
 Output your plan as a JSON array of steps. Each step should have:
 - step_number: Integer starting from 1
 - description: What to research
-- tool_hint: Suggested tool ("get_stock_price", "get_company_metrics", "get_price_history", "search_news", "search_competitors", or null for synthesis steps)
+- tool_hint: Suggested tool ("get_stock_snapshot", "get_price_history", "get_financials", "search_news", "search_competitors", or null for synthesis steps)
 
 Be specific and actionable. The executor will follow these steps exactly."""
 

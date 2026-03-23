@@ -229,17 +229,54 @@ def approve_trade_ui(thread_id, decision, modified_amount):
         return f"❌ Error: {str(e)}"
 
 
+def _parse_force_mode(mode):
+    """Map mode string to ExecutionMode enum."""
+    if mode == "deep":
+        return ExecutionMode.DEEP_RESEARCH
+    if mode == "flash":
+        return ExecutionMode.FLASH_BRIEFING
+    return None
+
+
+def _handle_combined_result(result, status_log, thread_id):
+    """Process combined workflow result into UI return values."""
+    report_md = ""
+
+    if result.get("requires_report_approval"):
+        status_log += "\n⏸️ PAUSED - Awaiting report approval"
+        if result.get("draft_report"):
+            report_md = format_report_for_display(result["draft_report"])
+        return status_log, report_md, thread_id, gr.update(visible=True), gr.update(visible=False)
+
+    if result.get("requires_trade_approval"):
+        status_log += "\n⏸️ TRADE PAUSED - Awaiting trade approval"
+        guardian_result = result.get("guardian_result")
+        trade_status = ""
+        if guardian_result:
+            trade_status = f"Policy: {guardian_result.policy_name}\nReason: {guardian_result.reason}"
+        return status_log, report_md, thread_id, gr.update(visible=False), gr.update(visible=True, value=trade_status)
+
+    if result.get("trade_executed"):
+        status_log += "\n🎉 Combined workflow complete!\n✅ Report published\n✅ Trade executed"
+        return status_log, report_md, thread_id, gr.update(visible=False), gr.update(visible=False)
+
+    guardian_result = result.get("guardian_result")
+    if guardian_result and guardian_result.decision.value == "reject":
+        status_log += f"\n❌ Trade blocked by Guardian: {guardian_result.reason}"
+    else:
+        status_log += "\n✅ Analysis complete (no trade action - hold recommendation)"
+
+    if result.get("draft_report"):
+        report_md = format_report_for_display(result["draft_report"])
+
+    return status_log, report_md, thread_id, gr.update(visible=False), gr.update(visible=False)
+
+
 def run_combined_ui(query, user_id, model, mode, trade_amount):
     """Run combined workflow."""
     thread_id = str(uuid.uuid4())
     os.environ[MODEL_ENV_VAR] = MODEL_MAP[model]
-
-    # Determine mode
-    force_mode = None
-    if mode == "deep":
-        force_mode = ExecutionMode.DEEP_RESEARCH
-    elif mode == "flash":
-        force_mode = ExecutionMode.FLASH_BRIEFING
+    force_mode = _parse_force_mode(mode)
 
     try:
         checkpointer = get_checkpointer()
@@ -257,38 +294,7 @@ def run_combined_ui(query, user_id, model, mode, trade_amount):
             force_mode=force_mode,
             trade_amount=float(trade_amount),
         )
-
-        report_md = ""
-        trade_status = ""
-
-        if result.get("requires_report_approval"):
-            status_log += "\n⏸️ PAUSED - Awaiting report approval"
-            if result.get("draft_report"):
-                report_md = format_report_for_display(result["draft_report"])
-            return status_log, report_md, thread_id, gr.update(visible=True), gr.update(visible=False)
-
-        elif result.get("requires_trade_approval"):
-            status_log += "\n⏸️ TRADE PAUSED - Awaiting trade approval"
-            guardian_result = result.get("guardian_result")
-            if guardian_result:
-                trade_status = f"Policy: {guardian_result.policy_name}\nReason: {guardian_result.reason}"
-            return status_log, report_md, thread_id, gr.update(visible=False), gr.update(visible=True, value=trade_status)
-
-        elif result.get("trade_executed"):
-            status_log += "\n🎉 Combined workflow complete!\n✅ Report published\n✅ Trade executed"
-            return status_log, report_md, thread_id, gr.update(visible=False), gr.update(visible=False)
-
-        else:
-            guardian_result = result.get("guardian_result")
-            if guardian_result and guardian_result.decision.value == "reject":
-                status_log += f"\n❌ Trade blocked by Guardian: {guardian_result.reason}"
-            else:
-                status_log += "\n✅ Analysis complete (no trade action - hold recommendation)"
-
-            if result.get("draft_report"):
-                report_md = format_report_for_display(result["draft_report"])
-
-            return status_log, report_md, thread_id, gr.update(visible=False), gr.update(visible=False)
+        return _handle_combined_result(result, status_log, thread_id)
 
     except Exception as e:
         return f"❌ Error: {str(e)}", "", thread_id, gr.update(visible=False), gr.update(visible=False)
