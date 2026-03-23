@@ -227,3 +227,158 @@ def test_parse_trade_request_valid():
 def test_parse_trade_request_invalid():
     """Test parsing invalid string returns None."""
     assert parse_trade_request("Not a trade request") is None
+
+
+# --- Test Skills (Modality 2) ---
+
+
+def test_skill_frontmatter_parsing():
+    """Test SKILL.md frontmatter parsing."""
+    from market_analyst.tools.skills import _parse_frontmatter
+
+    text = """---
+name: test_skill
+description: A test skill for unit testing
+---
+
+# Body content here
+"""
+    meta = _parse_frontmatter(text)
+    assert meta["name"] == "test_skill"
+    assert meta["description"] == "A test skill for unit testing"
+
+
+def test_skill_body_extraction():
+    """Test extracting body from SKILL.md."""
+    from market_analyst.tools.skills import _get_body
+
+    text = """---
+name: test
+description: test
+---
+
+# The Body
+
+Some content here."""
+    body = _get_body(text)
+    assert body.startswith("# The Body")
+    assert "Some content here." in body
+
+
+def test_load_skill_metadata():
+    """Test loading skill metadata from the skills directory."""
+    from market_analyst.tools.skills import load_skill_metadata
+
+    skills = load_skill_metadata()
+    assert len(skills) >= 2
+    names = {s.name for s in skills}
+    assert "earnings_analysis" in names
+    assert "sector_comparison" in names
+
+
+def test_use_skill_valid():
+    """Test activating a valid skill returns its body."""
+    from market_analyst.tools.skills import use_skill
+
+    result = use_skill.invoke({"skill_name": "earnings_analysis"})
+    assert "Revenue Assessment" in result
+    assert "Profitability Metrics" in result
+
+
+def test_use_skill_invalid():
+    """Test activating an unknown skill returns error."""
+    from market_analyst.tools.skills import use_skill
+
+    result = use_skill.invoke({"skill_name": "nonexistent_skill"})
+    assert "Unknown skill" in result
+    assert "earnings_analysis" in result
+
+
+# --- Test Code Execution (Modality 4) ---
+
+
+def test_code_exec_simple_calculation():
+    """Test executing a simple Python calculation."""
+    from market_analyst.tools.code_exec import execute_python_analysis
+
+    result = execute_python_analysis.invoke({"code": "print(2 + 2)"})
+    assert "4" in result
+
+
+def test_code_exec_financial_calculation():
+    """Test executing a financial calculation."""
+    from market_analyst.tools.code_exec import execute_python_analysis
+
+    code = """
+import math
+cagr = (150 / 100) ** (1 / 3) - 1
+print(f"CAGR: {cagr:.2%}")
+"""
+    result = execute_python_analysis.invoke({"code": code})
+    assert "CAGR:" in result
+    assert "14" in result  # ~14.47%
+
+
+def test_code_exec_blocks_dangerous_imports():
+    """Test that dangerous imports are blocked."""
+    from market_analyst.tools.code_exec import execute_python_analysis
+
+    result = execute_python_analysis.invoke({"code": "import os; os.listdir('.')"})
+    assert "Blocked" in result
+
+    result = execute_python_analysis.invoke({"code": "import subprocess"})
+    assert "Blocked" in result
+
+
+def test_code_exec_blocks_eval():
+    """Test that eval/exec calls are blocked."""
+    from market_analyst.tools.code_exec import execute_python_analysis
+
+    result = execute_python_analysis.invoke({"code": "eval('2+2')"})
+    assert "Blocked" in result
+
+
+# --- Test CLI-as-Tool (Modality 3) ---
+
+
+def test_cli_list_reports_command_construction(mocker):
+    """Test that cli_list_reports constructs the correct CLI command."""
+    mock_run = mocker.patch("market_analyst.tools.cli_tools.subprocess.run")
+    mock_run.return_value.returncode = 0
+    mock_run.return_value.stdout = "[]"
+
+    from market_analyst.tools.cli_tools import cli_list_reports
+
+    cli_list_reports.invoke({})
+
+    mock_run.assert_called_once()
+    cmd = mock_run.call_args[0][0]
+    assert cmd == ["uv", "run", "market-analyst", "--list-reports", "--json"]
+
+
+def test_cli_show_report_command_construction(mocker):
+    """Test that cli_show_report constructs the correct CLI command."""
+    mock_run = mocker.patch("market_analyst.tools.cli_tools.subprocess.run")
+    mock_run.return_value.returncode = 0
+    mock_run.return_value.stdout = '{"key": "test", "content": "report"}'
+
+    from market_analyst.tools.cli_tools import cli_show_report
+
+    cli_show_report.invoke({"report_key": "research_NVDA_20260322"})
+
+    mock_run.assert_called_once()
+    cmd = mock_run.call_args[0][0]
+    assert cmd == ["uv", "run", "market-analyst", "--show-report", "research_NVDA_20260322", "--json"]
+
+
+def test_cli_timeout_handling(mocker):
+    """Test that CLI command timeout is handled gracefully."""
+    import subprocess as sp
+
+    mock_run = mocker.patch("market_analyst.tools.cli_tools.subprocess.run")
+    mock_run.side_effect = sp.TimeoutExpired(cmd="test", timeout=30)
+
+    from market_analyst.tools.cli_tools import cli_list_reports
+
+    result = cli_list_reports.invoke({})
+    assert "timed out" in result

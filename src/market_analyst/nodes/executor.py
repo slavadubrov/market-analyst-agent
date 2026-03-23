@@ -13,35 +13,65 @@ from langgraph.prebuilt import create_react_agent
 
 from market_analyst.constants import DEFAULT_MODEL, MODEL_ENV_VAR
 from market_analyst.schemas import AgentState, PlanStep
+from market_analyst.tools.cli_tools import cli_list_reports, cli_show_report
+from market_analyst.tools.code_exec import execute_python_analysis
 from market_analyst.tools.search import search_competitors, search_news
+from market_analyst.tools.skills import get_skill_descriptions, use_skill
 from market_analyst.tools.stock import (
     get_financials,
     get_price_history,
     get_stock_snapshot,
 )
 
-EXECUTOR_SYSTEM_PROMPT = """You are a research analyst executing a specific step in an investment analysis plan.
+_SKILL_DESCRIPTIONS = get_skill_descriptions()
 
-You have access to the following tools:
+EXECUTOR_SYSTEM_PROMPT = f"""You are a research analyst executing a specific step in an investment analysis plan.
+
+You have access to tools across multiple modalities:
+
+**Data Tools (JSON tool calling):**
 - get_stock_snapshot: Get price, volume, market cap, P/E ratio, and a summary in one call
 - get_price_history: Get historical price data with volume over a configurable period
 - get_financials: Get income statement, balance sheet, or cash flow data
 - search_news: Search for recent news with extracted key points
 - search_competitors: Find competitor analysis with relative metrics
 
-Execute the assigned step thoroughly but efficiently. Use tools as needed to gather the required information.
-After gathering data, provide a clear summary of your findings for this step.
+**Expertise Tools (Skills):**
+- use_skill: Activate a domain playbook for structured analysis methodology
+{_SKILL_DESCRIPTIONS}
 
-Be concise but comprehensive. Token efficiency matters."""
+**Computation Tools (Code Execution):**
+- execute_python_analysis: Write and run Python code for financial calculations, ratio analysis, \
+growth rate computations, or data transformations. Use this when you need loops, conditionals, or math \
+that would be tedious to do manually.
+
+**Memory Tools (CLI):**
+- cli_list_reports: List previously saved analysis reports from document memory
+- cli_show_report: Retrieve a specific saved report by key
+
+**Guidelines:**
+- Use data tools to gather information
+- Use skills when you need a structured methodology (e.g., earnings analysis playbook)
+- Use code execution for calculations on data you already have
+- Use CLI tools to reference past analyses
+- Be concise but comprehensive. Token efficiency matters."""
 
 
-# All available tools for the executor (5 consolidated tools following ACI principles)
+# All available tools across modalities
 TOOLS = [
+    # JSON Tool Calling (modality 1)
     get_stock_snapshot,
     get_price_history,
     get_financials,
     search_news,
     search_competitors,
+    # Skills (modality 2)
+    use_skill,
+    # CLI-as-Tool (modality 3)
+    cli_list_reports,
+    cli_show_report,
+    # Code Execution / PTC (modality 4)
+    execute_python_analysis,
 ]
 
 

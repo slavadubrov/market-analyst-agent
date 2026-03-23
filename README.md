@@ -1,32 +1,86 @@
 # Market Analyst Agent
 
-> ⚠️ **DISCLAIMER**: This is a **demo project for educational purposes only**, created for the **"Engineering the Agentic Stack"** article series. Do NOT use this for actual trading or investment decisions. The trading functionality is **simulated** (no real trades are executed) and the analysis should not be considered financial advice.
+> **DISCLAIMER**: This is a **demo project for educational purposes only**, created for the **["Engineering the Agentic Stack"](https://slavadubrov.github.io/blog/)** article series. Do NOT use this for actual trading or investment decisions. The trading functionality is **simulated** (no real trades are executed) and the analysis should not be considered financial advice.
 
-An **Autonomous Investment Research Agent** demonstrating production-ready agentic patterns. This repo serves as a hands-on companion to the blog series, showcasing **ReAct**, **ReWOO**, **Plan-and-Execute**, and **Human-in-the-Loop** patterns in a realistic market research context.
+An **Autonomous Investment Research Agent** demonstrating production-ready agentic patterns. This repo serves as a hands-on companion to the blog series, showcasing multiple **reasoning loops**, **memory tiers**, and **tool modalities** in a realistic market research context.
 
-This project showcases how to build a sophisticated AI agent that can research stocks, analyze market data, and generate investment reports—while maintaining state, respecting human oversight, and running reliably in production environments.
+## What This Project Demonstrates
 
-## Why This Project?
+This project implements the full agentic stack across three dimensions:
 
-| Challenge | How We Solve It |
-|-----------|----------------|
-| **Complex Reasoning** | Researches multiple sources (ReAct) and synthesizes reports (Plan-and-Execute) |
-| **Persistence** | Remembers your portfolio (long-term) and research state (short-term) |
-| **Tool Use** | Interacts with external APIs (YFinance, Tavily) through well-designed interfaces |
-| **Human Oversight** | Requires approval before publishing reports or recommendations |
-| **Production Readiness** | Survives crashes, handles long-running tasks, containerized deployment |
+| Dimension | What's Implemented | Article |
+|-----------|-------------------|---------|
+| **Reasoning** | ReAct, ReWOO, Plan-and-Execute, Router | [Part 1: The Cognitive Engine](https://slavadubrov.github.io/blog/2026/01/31/the-cognitive-engine-choosing-the-right-reasoning-loop/) |
+| **Memory** | Hot (PostgreSQL), Cold (Qdrant), Document (file-based) | [Part 2: The Cortex](https://slavadubrov.github.io/blog/2026/02/14/the-cortex--architecting-memory-for-ai-agents/) |
+| **Tools** | JSON Tool Calling, Skills, CLI-as-Tool, Code Execution | Part 3: The Hands (WIP) |
+| **Safety** | Guardian pattern, HITL escalation, policy automation | Part 4: Safety Layers (coming soon) |
 
-## Features
+---
 
-- 🔀 **Smart Router**: Automatically classifies requests as deep research or quick snapshot
-- 🧠 **Plan-and-Execute Architecture**: Breaks down research into structured steps (deep mode)
-- 🔄 **ReAct Execution**: Thought-Action-Observation loop for thorough analysis
-- ⚡ **ReWOO Mode**: Fast, token-efficient snapshots with parallel tool execution
-- 💾 **PostgreSQL Checkpointing**: Pause and resume mid-analysis
-- 🧠 **User Profiles & Knowledge**: Qdrant-backed long-term memory (Vector DB)
-- 📁 **Document Memory**: File-based knowledge accumulation with namespace organization
-- ✋ **Human-in-the-Loop**: Approval required before publishing reports
-- 🐳 **Containerized**: Docker Compose for production deployment
+## Architecture
+
+### Reasoning Loops (Part 1)
+
+The agent supports multiple reasoning strategies, selected automatically by a **Router** or forced via `--mode`:
+
+| Mode | Pattern | How It Works | Best For |
+|------|---------|-------------|----------|
+| **Deep** | Plan-and-Execute + ReAct | Planner breaks task into steps, Executor runs each step with a Thought-Action-Observation loop | Comprehensive multi-source analysis |
+| **Flash** | ReWOO | Planner generates all tool calls upfront, Worker executes in parallel, Solver synthesizes once | Quick market snapshots |
+| **Auto** | Router | LLM classifies query intent and selects Deep or Flash automatically | Default — lets the agent decide |
+
+**Key Difference:**
+- **ReAct** (Deep): LLM thinks -> calls tool -> observes -> thinks -> calls tool... (flexible but expensive)
+- **ReWOO** (Flash): LLM plans all tools -> executes in parallel -> synthesizes once (fast and token-efficient)
+
+### Memory Architecture (Part 2)
+
+Three-tier memory system with different retention policies:
+
+| Tier | Technology | Purpose | Retention |
+|------|-----------|---------|-----------|
+| **Hot Memory** | PostgreSQL + LangGraph checkpointing | Pause/resume execution, crash recovery | 90 days |
+| **Cold Memory** | Qdrant vector database | User profiles, preferences, semantic search | 365 days |
+| **Document Memory** | File-based JSON with namespaces | Report archives, conventions, learnings | 730 days |
+
+```
+memory/documents/
+├── research/          # Analysis reports (published after HITL approval)
+├── conventions/       # Established patterns (e.g., report formatting)
+├── learnings/         # Episodic knowledge (successful strategies)
+└── user-profiles/     # User preferences (complementary to Qdrant)
+```
+
+### Tool Modalities (Part 3)
+
+The agent demonstrates **four distinct tool modalities**, following [ACI (Agent-Computer Interface)](https://arxiv.org/abs/2405.15793) design principles:
+
+| # | Modality | Implementation | Tools | Token Overhead |
+|---|----------|---------------|-------|---------------|
+| 1 | **JSON Tool Calling** | `@tool` + Pydantic schemas | `get_stock_snapshot`, `get_price_history`, `get_financials`, `search_news`, `search_competitors` | ~4,500 tokens (5 tool schemas) |
+| 2 | **Skills (SKILL.md)** | Markdown files with YAML frontmatter | `use_skill` -> `earnings_analysis`, `sector_comparison` playbooks | ~100 tokens (metadata only at startup) |
+| 3 | **CLI-as-Tool** | Subprocess wrapper around own CLI | `cli_list_reports`, `cli_show_report` (agent calls `market-analyst --json`) | Near zero (no schema) |
+| 4 | **Code Execution (PTC)** | `PythonAstREPLTool` with safety guards | `execute_python_analysis` for ratio calculations, CAGR, portfolio math | ~200 tokens (1 tool schema) |
+
+**ACI Design Principles Applied:**
+- **Tool consolidation**: 10+ granular tools -> 5 high-level tools (62% schema reduction)
+- **Pydantic validation**: Input guardrails catch bad tickers/periods before API calls
+- **Structured outputs**: Every tool returns a model with a `summary` field ready for reports
+- **Retry logic**: Tenacity decorators with exponential backoff on all external API calls
+
+### Workflows
+
+**1. Analysis Workflow** — Router -> [ReAct or ReWOO] -> Reporter -> Publish (with HITL approval)
+
+![Analysis Workflow](docs/analysis_workflow.svg)
+
+**2. Trade Workflow** — Guardian policy engine -> Auto-approve / Escalate / Reject
+
+![Trade Workflow](docs/trade_workflow.svg)
+
+**3. Combined Workflow** — Analysis -> Report Approval -> Guardian -> Trade Execution
+
+![Combined Architecture](docs/combined_workflow.svg)
 
 ---
 
@@ -39,8 +93,6 @@ This project showcases how to build a sophisticated AI agent that can research s
 - Docker & Docker Compose (for persistence features)
 
 ### Step 1: Get Your API Keys
-
-You'll need two API keys to run this project:
 
 #### Anthropic API Key (Claude)
 
@@ -60,11 +112,9 @@ You'll need two API keys to run this project:
 4. Copy your API key
 5. Save this as `TAVILY_API_KEY`
 
-> **Note**: Tavily's free tier includes 1,000 API calls/month—plenty for development.
+> **Note**: Tavily's free tier includes 1,000 API calls/month — plenty for development.
 
-### Step 2: Development Setup (Makefile)
-
-The project includes a `Makefile` to streamline development tasks.
+### Step 2: Development Setup
 
 ```bash
 # Setup virtual environment and install dependencies
@@ -74,20 +124,15 @@ make install
 # Run tests
 make test
 
-# Format code (ruff)
+# Format and lint code
 make format
-
-# Lint code (ruff)
 make lint
 
-# Start Databases (Postgres, Qdrant, Redis)
+# Start databases (Postgres, Qdrant, Redis)
 make db-up
 
-# Stop Databases
+# Stop databases
 make db-down
-
-# Clean up environment (remove virtual environment, caches, stop containers)
-make clean
 ```
 
 If you don't have `make` installed, you can run the commands directly using `uv` or `docker compose` (see Makefile for details).
@@ -95,146 +140,56 @@ If you don't have `make` installed, you can run the commands directly using `uv`
 ### Step 3: Configure Environment Variables
 
 ```bash
-# Copy the environment template
 cp .env.example .env
-
-# Open .env and add your API keys
 ```
 
-Edit the `.env` file with your API keys:
+Edit `.env` with your API keys:
 
 ```bash
-# Required: Your API keys
 ANTHROPIC_API_KEY=sk-ant-api03-xxxxxxxxxxxxx
 TAVILY_API_KEY=tvly-xxxxxxxxxxxxx
 
-# PostgreSQL connection (defaults work with docker-compose)
+# PostgreSQL (defaults work with docker-compose)
 POSTGRES_HOST=localhost
 POSTGRES_PORT=5432
 POSTGRES_DB=market_analyst
 POSTGRES_USER=analyst
 POSTGRES_PASSWORD=analyst_pass
 
-
-# Qdrant connection (defaults work with docker-compose)
+# Qdrant (defaults work with docker-compose)
 QDRANT_HOST=localhost
 QDRANT_PORT=6333
 ```
 
-### Step 4: Set Up PostgreSQL and Qdrant Using Docker Compose
-
-The agent uses **PostgreSQL** for checkpointing (pause/resume) and **Qdrant** for user profile memory.
-
-The easiest way to run both services:
+### Step 4: Start Infrastructure
 
 ```bash
-# Start PostgreSQL and Qdrant in the background
 docker compose -f docker/docker-compose.yml --env-file .env up -d postgres qdrant redis
-
-# Verify services are running
-docker compose -f docker/docker-compose.yml --env-file .env ps
 ```
-
-Both services will be available at their default ports (`localhost:5432` for PostgreSQL, `localhost:6333` for Qdrant).
 
 ---
 
-## Running the Agent
-
-### Quick Test (No Persistence)
-
-Run without PostgreSQL/Qdrant to test basic functionality:
-
-```bash
-uv run python -m market_analyst.cli "Analyze NVDA stock" --no-persist
-```
-
-### Full Mode (With Persistence)
-
-With PostgreSQL and Qdrant running:
-
-```bash
-uv run python -m market_analyst.cli "Analyze NVDA stock"
-```
-
-### Model Selection
-
-Choose between models based on your needs:
-
-```bash
-# Use Haiku (faster, cheaper - good for testing)
-uv run python -m market_analyst.cli "Analyze NVDA stock" --model haiku
-
-# Use Sonnet (default, more powerful - better analysis)
-uv run python -m market_analyst.cli "Analyze NVDA stock" --model sonnet
-```
-
-### Execution Mode Selection
-
-Choose between analysis modes:
-
-```bash
-# Auto mode (default) - Router classifies your intent automatically
-uv run python -m market_analyst.cli "Analyze NVDA stock"
-
-# Force Deep Research mode (ReAct) - Thorough, multi-step analysis
-uv run python -m market_analyst.cli "Quick NVDA update" --mode deep
-
-# Force Flash Briefing mode (ReWOO) - Fast, token-efficient snapshot
-uv run python -m market_analyst.cli "Analyze NVDA risks" --mode flash
-```
-
-**When to use each mode:**
-
-- **Auto**: Let the router decide based on your query keywords
-- **Deep**: For comprehensive reports requiring multi-source synthesis
-- **Flash**: For quick market updates when speed matters
-
-### Using Docker (All-in-One)
-
-Run everything in containers:
-
-```bash
-# Start all services including the app
-docker compose -f docker/docker-compose.yml up --build
-
-# In another terminal, run an analysis
-docker compose -f docker/docker-compose.yml exec app python -m market_analyst.cli "Analyze NVDA stock"
-
-### Web Interface (Gradio)
-
-For a more interactive experience, you can use the web interface:
-
-```bash
-# Start the Gradio UI
-make run-ui
-```
-
-This will launch the app at `http://localhost:7860`, where you can:
-
-- Configure your profile
-- Run analyses and see reports
-- Execute trades with Guardian checks
-- Run the combined workflow
-
----
-
-## Usage Examples
+## Usage
 
 ### Basic Analysis
 
 ```bash
-# Analyze a stock
-uv run market-analyst "Analyze NVDA for investment potential"
+# Quick test without databases
+uv run market-analyst "Analyze NVDA stock" --no-persist
 
-# The agent will:
-# 1. Create a research plan
-# 2. Execute each step using tools
-# 3. Generate a draft report
-# 4. Pause for your approval
+# Full mode with persistence
+uv run market-analyst "Analyze NVDA stock"
+
+# Force a specific reasoning mode
+uv run market-analyst "Analyze NVDA stock" --mode deep    # ReAct (thorough)
+uv run market-analyst "NVDA price update" --mode flash    # ReWOO (fast)
+
+# Choose model
+uv run market-analyst "Analyze NVDA stock" --model haiku  # Faster, cheaper
+uv run market-analyst "Analyze NVDA stock" --model sonnet # More powerful
 ```
 
-### Set User Profile
+### User Profiles
 
 ```bash
 # Set risk tolerance (persists in Qdrant)
@@ -244,62 +199,38 @@ uv run market-analyst --set-profile --risk-tolerance conservative --horizon long
 uv run market-analyst "Analyze AAPL stock"
 ```
 
-### Pause and Resume
+### Pause, Resume, and Approve
 
 ```bash
-# Start an analysis
+# Start an analysis (Ctrl+C to pause)
 uv run market-analyst "Deep analysis of semiconductor sector"
-# ... analysis running ...
-# Press Ctrl+C to pause
 
 # Resume later
 uv run market-analyst --resume --thread-id <thread-id>
-```
 
-### Approve Reports
-
-```bash
-# When a report is ready, it pauses for approval
+# Approve a draft report
 uv run market-analyst --approve --thread-id <thread-id>
 ```
 
-### Document Memory (Retrieve Past Reports)
-
-The agent maintains a structured document memory system for accumulated knowledge:
+### Document Memory
 
 ```bash
 # List all saved reports
 uv run market-analyst --list-reports
 
-# Search reports by ticker or content
+# JSON output (for machine consumption / CLI-as-Tool modality)
+uv run market-analyst --list-reports --json
+
+# Search reports by ticker
 uv run market-analyst --search-reports "NVDA"
 
 # Display a specific report
 uv run market-analyst --show-report "NVDA_deep_2024-01-15_143022"
 ```
 
-**Document Memory Organization:**
+### Guardian Trade Workflow
 
-Reports are stored in `memory/documents/research/` with structured metadata:
-
-```
-memory/documents/
-├── research/          # Market analysis reports
-├── conventions/       # Established patterns and preferences
-├── learnings/         # Episodic knowledge from past runs
-└── user-profiles/     # User-specific configurations
-```
-
-Each document includes:
-- Content (markdown report)
-- Metadata (ticker, execution mode, timestamp, user ID)
-- Search/retrieval interface
-
-### Guardian Trade Workflow (Article 4 Demo)
-
-The Guardian demonstrates automated policy enforcement with HITL escalation.
-
-> **⚠️ Note**: All trades are **simulated** — this demo does not execute real trades.
+> **All trades are simulated** — no real trades are executed.
 
 ```bash
 # Low-value trade (auto-approved by Guardian)
@@ -307,159 +238,88 @@ uv run market-analyst --trade --action buy --ticker NVDA --amount 300
 
 # High-value trade (escalated to human)
 uv run market-analyst --trade --action buy --ticker NVDA --amount 50000
-# → Guardian pauses for approval
 uv run market-analyst --approve-trade --thread-id <thread-id>
 
 # Dangerous action (auto-rejected by Guardian)
 uv run market-analyst --trade --action delete_logs --ticker NVDA --amount 0
-# → Guardian blocks immediately (no human involvement)
 ```
 
-**Policy Thresholds (configurable in `guardian.py`):**
+### Combined Workflow (Full Demo)
 
-- `< $500`: Auto-approved (safe path)
-- `$500 - $10,000`: Escalated for human review
-- `> $10,000`: Escalated (high-value threshold)
-- `delete_*` actions: Auto-rejected (restricted)
+```bash
+# Analysis -> Report Approval -> Guardian -> Trade
+uv run market-analyst "Analyze NVDA for investment" --combined --trade-amount 5000
+```
+
+### Web Interface
+
+```bash
+make run-ui
+# Opens at http://localhost:7860
+```
 
 ---
 
-## Architecture
-
-### Memory Architecture: Three-Tier System
-
-The agent implements a complete memory architecture as described in Article 2:
-
-**1. Hot Memory (Short-term State)**
-- **Technology**: PostgreSQL with LangGraph checkpointing
-- **Purpose**: Pause/resume execution mid-analysis
-- **Retention**: 90 days (configurable)
-- **Use Case**: State snapshots for crash recovery and long-running tasks
-
-**2. Cold Memory (Long-term Semantic)**
-- **Technology**: Qdrant vector database
-- **Purpose**: User profiles, preferences, and semantic search
-- **Retention**: 365 days (configurable)
-- **Use Case**: Profile retrieval, similarity search
-
-**3. Document Memory (Knowledge Accumulation)**
-- **Technology**: File-based JSON storage with namespaces
-- **Purpose**: Structured knowledge organization and retrieval
-- **Retention**: 730 days (configurable)
-- **Use Case**: Report archives, conventions, learnings
-
-**Memory Namespace Organization:**
+## Project Structure
 
 ```
-memory/documents/
-├── research/          # Analysis reports (published after HITL approval)
-├── conventions/       # Established patterns (e.g., report formatting)
-├── learnings/         # Episodic knowledge (successful strategies)
-└── user-profiles/     # User preferences (complementary to Qdrant)
+src/market_analyst/
+├── nodes/
+│   ├── router.py              # Intent classification (deep vs flash)
+│   ├── planner.py             # Research plan generation (ReAct path)
+│   ├── executor.py            # Step execution with ReAct loop
+│   ├── rewoo_planner.py       # Upfront tool planning (ReWOO path)
+│   ├── rewoo_worker.py        # Parallel tool execution
+│   ├── rewoo_solver.py        # Result synthesis
+│   ├── reporter.py            # Report generation
+│   └── guardian.py            # Policy-as-Code safety layer
+├── tools/
+│   ├── stock.py               # JSON tools: get_stock_snapshot, get_price_history, get_financials
+│   ├── search.py              # JSON tools: search_news, search_competitors
+│   ├── trade.py               # JSON tools: execute_trade
+│   ├── skills.py              # Skills modality: SKILL.md loader + use_skill tool
+│   ├── cli_tools.py           # CLI modality: cli_list_reports, cli_show_report
+│   └── code_exec.py           # Code execution modality: execute_python_analysis
+├── workflows/
+│   ├── analysis_workflow.py   # Main analysis graph
+│   ├── trade_workflow.py      # Guardian + HITL trade graph
+│   └── combined_workflow.py   # End-to-end chained workflow
+├── memory.py                  # Three-tier memory (PostgreSQL, Qdrant, DocumentMemory)
+├── schemas.py                 # Pydantic state models
+├── cli.py                     # CLI entry point
+└── app.py                     # Gradio web UI
+skills/
+├── earnings_analysis.md       # Earnings analysis playbook (SKILL.md format)
+└── sector_comparison.md       # Sector comparison framework
 ```
-
-**Example Flow:**
-
-```
-User Query → Hot Memory (checkpoint state)
-          ↓
-          → Cold Memory (load user profile)
-          ↓
-          → Generate Report
-          ↓
-          → Document Memory (save to research/)
-```
-
-### Workflows
-
-This project implements **three distinct workflows** to demonstrate different agentic patterns:
-
-### 1. Analysis Workflow
-
-**Patterns: Router, ReAct, ReWOO, Plan-and-Execute**
-
-The entry point for stock research. A **Router** classifies the user's intent to choose between deep research and a quick snapshot.
-
-![Analysis Workflow](docs/analysis_workflow.svg)
-
-- **Deep Research (ReAct)**: Used for comprehensive queries ("Analyze NVDA vs AMD"). Uses a **Planner** to breakdown the task and an **Executor** loop to iteratively gather information.
-- **Flash Briefing (ReWOO)**: Used for status checks ("NVDA price"). Uses a **Planner** to generate independent tool calls that run in **parallel**, followed by a **Solver** that synthesizes the results.
-
-### 2. Trade Workflow
-
-**Patterns: Guardian, Human-in-the-Loop (HITL)**
-
-A safe environment for executing sensitive actions. The **Guardian** acts as a policy engine (Policy-as-Code) to enforce rules before any action is taken.
-
-![Trade Workflow](docs/trade_workflow.svg)
-
-- **Guardian Node**: Deterministically checks the trade against safety policies.
-- **Auto-Approval**: Safe operations (e.g., small trades) proceed directly to execution.
-- **Escalation**: Risky operations (e.g., large trades) are paused for **Human Review**.
-- **Rejection**: Dangerous operations (e.g., deleting logs) are blocked immediately.
-
-### 3. Combined Workflow (The "Full Stack" Demo)
-
-**Patterns: All of the above + Chaining**
-
-chains the Analysis and Trade workflows into a complete end-to-end experience:
-
-![Combined Architecture](docs/combined_workflow.svg)
-
-1. **Analysis**: The agent researches a stock and generates a report.
-2. **Report Approval**: You review and approve the report (HITL).
-3. **Trade Proposal**: If the report recommends "Buy", a trade is proposed.
-4. **Guardian Check**: The Guardian checks if the trade is safe.
-5. **Execution**: The trade is executed (simulated).
-
-**Key Difference:**
-
-- **ReAct** (Deep): LLM thinks → calls tool → waits → thinks → calls tool → waits... (flexible but expensive)
-- **ReWOO** (Flash): LLM plans all tools → executes in parallel → synthesizes once (fast and token-efficient)
-
-### Deep Dive: Planner vs. ReWOO Planner
-
-| Feature | **Planner** (Deep Path) | **ReWOO Planner** (Flash Path) |
-| :--- | :--- | :--- |
-| **Node File** | `nodes/planner.py` | `nodes/rewoo_planner.py` |
-| **Output Type** | Text descriptions of steps | Specific tool calls with variables (`#E1`) |
-| **Execution** | Steps executed by a smart **ReAct Loop** | Tool calls executed by a dumb **Worker** |
-| **Parallelism** | Sequential (step-by-step) | **Parallel** (async execution) |
-| **Best For** | "Find the CEO's latest interview" | "Get price, news, and metrics" |
 
 ---
 
 ## Article Series: "Engineering the Agentic Stack"
 
-This project is the **demo companion** for the article series. Each part of the series has corresponding implementations in this repo:
-
-| Article | Concepts Covered | Demo Implementation |
-|---------|-----------------|---------------------|
-| **Part 1: Cognitive Engine** | Reasoning loops: ReAct vs ReWOO vs Plan-and-Execute | `router.py` classifies intent → `planner.py` + `executor.py` (ReAct) or `rewoo_*.py` (ReWOO) |
-| **Part 2: The Cortex** | Three-tier memory: hot/cold/document, checkpointing, retention policies | PostgreSQL (hot), Qdrant (cold), DocumentMemory (file-based knowledge) |
-| **Part 3: Tool Ergonomics** | ACI design, Pydantic validation, structured outputs | `tools/` with `get_stock_info`, `search_news`, `calculate_metrics` |
-| **Part 4: Human-in-the-Loop** | Guardian pattern, HITL escalation, policy automation | `guardian.py` (deterministic) + `trade_workflow.py` (HITL demo) |
-| **Part 5: Production** | Container deployment, serverless traps, observability | `docker/docker-compose.yml` |
-
-> **📝 Note on Demo Code**: The trade execution (`trade_workflow.py`, `trade_executor.py`) is **simulated** — no real trades are executed. This is intentional to safely demonstrate the Guardian + HITL patterns without financial risk.
+| Article | Concepts | Demo Implementation |
+|---------|----------|---------------------|
+| [**Part 1: The Cognitive Engine**](https://slavadubrov.github.io/blog/2026/01/31/the-cognitive-engine-choosing-the-right-reasoning-loop/) | Reasoning loops: ReAct vs ReWOO vs Plan-and-Execute | `router.py` -> `planner.py` + `executor.py` (ReAct) or `rewoo_*.py` (ReWOO) |
+| [**Part 2: The Cortex**](https://slavadubrov.github.io/blog/2026/02/14/the-cortex--architecting-memory-for-ai-agents/) | Three-tier memory, checkpointing, retention policies | PostgreSQL (hot), Qdrant (cold), DocumentMemory (file-based) |
+| **Part 3: The Hands** (WIP) | ACI design, 4 tool modalities, Pydantic validation | `tools/` — JSON, Skills, CLI-as-Tool, Code Execution |
+| **Part 4: Safety Layers** | Guardian pattern, HITL escalation, policy automation | `guardian.py` + `trade_workflow.py` |
+| **Part 5: Production** | Container deployment, observability | `docker/docker-compose.yml` |
 
 ---
 
 ## Configuration Reference
 
-All environment variables (set in `.env`):
-
 | Variable | Required | Description | Default |
 |----------|----------|-------------|---------|
-| `ANTHROPIC_API_KEY` | ✅ | Anthropic API key for Claude | - |
-| `TAVILY_API_KEY` | ✅ | Tavily API key for web search | - |
-| `POSTGRES_HOST` | ❌ | PostgreSQL host | `localhost` |
-| `POSTGRES_PORT` | ❌ | PostgreSQL port | `5432` |
-| `POSTGRES_DB` | ❌ | PostgreSQL database name | `market_analyst` |
-| `POSTGRES_USER` | ❌ | PostgreSQL username | `analyst` |
-| `POSTGRES_PASSWORD` | ❌ | PostgreSQL password | `analyst_pass` |
-| `QDRANT_HOST` | ❌ | Qdrant host | `localhost` |
-| `QDRANT_PORT` | ❌ | Qdrant port | `6333` |
+| `ANTHROPIC_API_KEY` | Yes | Anthropic API key for Claude | - |
+| `TAVILY_API_KEY` | Yes | Tavily API key for web search | - |
+| `POSTGRES_HOST` | No | PostgreSQL host | `localhost` |
+| `POSTGRES_PORT` | No | PostgreSQL port | `5432` |
+| `POSTGRES_DB` | No | PostgreSQL database name | `market_analyst` |
+| `POSTGRES_USER` | No | PostgreSQL username | `analyst` |
+| `POSTGRES_PASSWORD` | No | PostgreSQL password | `analyst_pass` |
+| `QDRANT_HOST` | No | Qdrant host | `localhost` |
+| `QDRANT_PORT` | No | Qdrant port | `6333` |
 
 ---
 
@@ -468,13 +328,8 @@ All environment variables (set in `.env`):
 ### PostgreSQL Connection Issues
 
 ```bash
-# Check if PostgreSQL is running
 docker compose -f docker/docker-compose.yml ps postgres
-
-# Check logs
 docker compose -f docker/docker-compose.yml logs postgres
-
-# Test connection
 psql -h localhost -U analyst -d market_analyst -c "SELECT 1;"
 ```
 

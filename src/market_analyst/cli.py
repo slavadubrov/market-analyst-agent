@@ -5,6 +5,7 @@ demonstrating all the key features from the blog series.
 """
 
 import argparse
+import json
 import os
 import sys
 import traceback
@@ -165,6 +166,22 @@ def list_reports_command(args):
         doc_memory = get_document_memory()
         reports = doc_memory.list_docs(namespace="research")
 
+        if getattr(args, "json", False):
+            items = []
+            for doc in reports:
+                metadata = doc.get("metadata", {})
+                items.append(
+                    {
+                        "key": doc.get("key"),
+                        "ticker": metadata.get("ticker"),
+                        "execution_mode": metadata.get("execution_mode"),
+                        "created_at": doc.get("created_at"),
+                        "path": doc.get("path"),
+                    }
+                )
+            print(json.dumps(items))
+            return
+
         if not reports:
             print("\n📋 No reports found in document memory")
             return
@@ -198,6 +215,21 @@ def search_reports_command(args):
     try:
         doc_memory = get_document_memory()
         results = doc_memory.search_docs(namespace="research", query=args.search_reports)
+
+        if getattr(args, "json", False):
+            items = []
+            for doc in results:
+                metadata = doc.get("metadata", {})
+                items.append(
+                    {
+                        "key": doc.get("key"),
+                        "ticker": metadata.get("ticker"),
+                        "execution_mode": metadata.get("execution_mode"),
+                        "created_at": doc.get("created_at"),
+                    }
+                )
+            print(json.dumps(items))
+            return
 
         if not results:
             print(f"\n🔍 No reports found matching '{args.search_reports}'")
@@ -233,9 +265,24 @@ def show_report_command(args):
         doc = doc_memory.read_doc(namespace="research", key=args.show_report)
 
         if not doc:
-            print(f"\n❌ Report '{args.show_report}' not found")
-            print("\n💡 Use --list-reports to see available reports")
+            if getattr(args, "json", False):
+                print(json.dumps({"error": f"Report '{args.show_report}' not found"}))
+            else:
+                print(f"\n❌ Report '{args.show_report}' not found")
+                print("\n💡 Use --list-reports to see available reports")
             sys.exit(1)
+
+        if getattr(args, "json", False):
+            print(
+                json.dumps(
+                    {
+                        "key": args.show_report,
+                        "content": doc.get("content", ""),
+                        "metadata": doc.get("metadata", {}),
+                    }
+                )
+            )
+            return
 
         print("\n" + "=" * 60)
         print(doc["content"])
@@ -379,6 +426,9 @@ Examples:
         metavar="KEY",
         help="Display a specific report by key",
     )
+
+    # Output format
+    parser.add_argument("--json", action="store_true", help="Output results as JSON (for machine consumption)")
 
     # Debugging
     parser.add_argument("--verbose", "-v", action="store_true", help="Enable verbose output")
