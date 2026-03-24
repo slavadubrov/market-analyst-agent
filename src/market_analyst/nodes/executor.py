@@ -13,36 +13,102 @@ from langgraph.prebuilt import create_react_agent
 
 from market_analyst.constants import DEFAULT_MODEL, MODEL_ENV_VAR
 from market_analyst.schemas import AgentState, PlanStep
+from market_analyst.tools.cli_tools import cli_list_reports, cli_show_report
+from market_analyst.tools.code_exec import execute_python_analysis
 from market_analyst.tools.search import search_competitors, search_news
+from market_analyst.tools.skills import get_skill_descriptions, use_skill
 from market_analyst.tools.stock import (
-    get_company_metrics,
+    get_financials,
     get_price_history,
-    get_stock_price,
+    get_stock_snapshot,
 )
 
-EXECUTOR_SYSTEM_PROMPT = """You are a research analyst executing a specific step in an investment analysis plan.
+_SKILL_DESCRIPTIONS = get_skill_descriptions()
 
-You have access to the following tools:
-- get_stock_price: Get current price for a ticker
-- get_company_metrics: Get financial metrics (use mode="concise" unless you need details)
-- get_price_history: Get historical price data
-- search_news: Search for recent news about a topic
-- search_competitors: Find competitor analysis
+EXECUTOR_SYSTEM_PROMPT = f"""You are a research analyst executing a specific step in an investment analysis plan.
 
-Execute the assigned step thoroughly but efficiently. Use tools as needed to gather the required information.
-After gathering data, provide a clear summary of your findings for this step.
+You have access to tools across multiple modalities:
 
-Be concise but comprehensive. Token efficiency matters."""
+**Data Tools (JSON tool calling):**
+- get_stock_snapshot: Get price, volume, market cap, P/E ratio, and a summary in one call
+- get_price_history: Get historical price data with volume over a configurable period
+- get_financials: Get income statement, balance sheet, or cash flow data
+- search_news: Search for recent news with extracted key points
+- search_competitors: Find competitor analysis with relative metrics
+
+**Expertise Tools (Skills):**
+- use_skill: Activate a domain playbook for structured analysis methodology
+{_SKILL_DESCRIPTIONS}
+
+**Computation Tools (Code Execution):**
+- execute_python_analysis: Write and run Python code for financial calculations, ratio analysis, \
+growth rate computations, or data transformations. Use this when you need loops, conditionals, or math \
+that would be tedious to do manually.
+
+**Memory Tools (CLI):**
+- cli_list_reports: List previously saved analysis reports from document memory
+- cli_show_report: Retrieve a specific saved report by key
+
+**Guidelines:**
+- Use data tools to gather information
+- Use skills when you need a structured methodology (e.g., earnings analysis playbook)
+- Use code execution for calculations on data you already have
+- Use CLI tools to reference past analyses
+- Be concise but comprehensive. Token efficiency matters."""
 
 
-# All available tools for the executor
+# All available tools across modalities
 TOOLS = [
-    get_stock_price,
-    get_company_metrics,
+    # JSON Tool Calling (modality 1)
+    get_stock_snapshot,
     get_price_history,
+    get_financials,
     search_news,
     search_competitors,
+    # Skills (modality 2)
+    use_skill,
+    # CLI-as-Tool (modality 3)
+    cli_list_reports,
+    cli_show_report,
+    # Code Execution / PTC (modality 4)
+    execute_python_analysis,
 ]
+
+
+def _build_previous_context(plan, current_step_index):
+    """Build context string from previously completed steps."""
+    parts = []
+    for step in plan[:current_step_index]:
+        if step.result:
+            parts.append(f"\nStep {step.step_number} ({step.description}): {step.result}\n")
+    return "".join(parts)
+
+
+def _create_updated_plan(state, current_step, result_text):
+    """Create a copy of the plan with the current step marked complete."""
+    updated_plan = list(state.plan)
+    updated_plan[state.current_step_index] = PlanStep(
+        step_number=current_step.step_number,
+        description=current_step.description,
+        tool_hint=current_step.tool_hint,
+        completed=True,
+        result=result_text,
+    )
+    return updated_plan
+
+
+def _update_research_data(state, result, current_step, step_result):
+    """Update research data with raw results from tool calls."""
+    research_data = state.research_data
+    if not research_data:
+        return research_data
+    for msg in result["messages"]:
+        if hasattr(msg, "tool_calls") and msg.tool_calls:
+            if research_data.raw_data is None:
+                research_data.raw_data = {}
+            research_data.raw_data[f"step_{current_step.step_number}"] = step_result
+            break
+    return research_data
 
 
 def executor_node(state: AgentState) -> dict:
@@ -52,44 +118,21 @@ def executor_node(state: AgentState) -> dict:
     1. Gets the current step from the plan
     2. Uses a ReAct agent to execute it with tools
     3. Records the result and advances to the next step
-
-    Args:
-        state: Current agent state with plan and current_step_index
-
-    Returns:
-        Updated state with step results and incremented index
     """
-    # Check if we have a plan to execute
     if not state.plan:
         return {"error": "No plan to execute"}
 
-    # Check if we've completed all steps
     if state.current_step_index >= len(state.plan):
-        return {}  # All steps complete, will route to reporter
+        return {}
 
     current_step = state.plan[state.current_step_index]
+    previous_context = _build_previous_context(state.plan, state.current_step_index)
 
-    # Build context from previous steps
-    previous_context = ""
-    for _i, step in enumerate(state.plan[: state.current_step_index]):
-        if step.result:
-            previous_context += f"\nStep {step.step_number} ({step.description}): {step.result}\n"
-
-    # Create the ReAct agent for this step
     model_name = os.getenv(MODEL_ENV_VAR, DEFAULT_MODEL)
-    llm = ChatAnthropic(
-        model=model_name,
-        temperature=0,
-    )
+    llm = ChatAnthropic(model=model_name, temperature=0)
+    react_agent = create_react_agent(model=llm, tools=TOOLS)
 
-    react_agent = create_react_agent(
-        model=llm,
-        tools=TOOLS,
-    )
-
-    # Prepare the task for this step
     ticker = state.research_data.ticker if state.research_data else "UNKNOWN"
-
     task_message = f"""Execute Step {current_step.step_number}: {current_step.description}
 
 Ticker being analyzed: {ticker}
@@ -100,10 +143,8 @@ Previous research findings:
 
 Complete this step and summarize your findings concisely."""
 
-    # Progress indicator
     print(f"\n🔄 Executing step {current_step.step_number}/{len(state.plan)}: {current_step.description}")
 
-    # Run the ReAct agent
     try:
         result = react_agent.invoke(
             {
@@ -114,32 +155,10 @@ Complete this step and summarize your findings concisely."""
             }
         )
 
-        # Extract the final response
         final_message = result["messages"][-1]
         step_result = final_message.content if hasattr(final_message, "content") else str(final_message)
-
-        # Update the step with its result
-        updated_plan = list(state.plan)
-        updated_step = PlanStep(
-            step_number=current_step.step_number,
-            description=current_step.description,
-            tool_hint=current_step.tool_hint,
-            completed=True,
-            result=step_result,
-        )
-        updated_plan[state.current_step_index] = updated_step
-
-        # Update research data based on tool calls
-        research_data = state.research_data
-        if research_data:
-            # Try to extract key data from tool results
-            for msg in result["messages"]:
-                if hasattr(msg, "tool_calls"):
-                    for _tool_call in msg.tool_calls:
-                        # Store raw results for later synthesis
-                        if research_data.raw_data is None:
-                            research_data.raw_data = {}
-                        research_data.raw_data[f"step_{current_step.step_number}"] = step_result
+        updated_plan = _create_updated_plan(state, current_step, step_result)
+        research_data = _update_research_data(state, result, current_step, step_result)
 
         print(f"   ✅ Step {current_step.step_number} complete")
 
@@ -151,17 +170,8 @@ Complete this step and summarize your findings concisely."""
         }
 
     except Exception as e:
-        # Mark step as failed but continue
         print(f"\n❌ Step {current_step.step_number} failed: {str(e)}")
-        updated_plan = list(state.plan)
-        updated_step = PlanStep(
-            step_number=current_step.step_number,
-            description=current_step.description,
-            tool_hint=current_step.tool_hint,
-            completed=True,
-            result=f"Error: {str(e)}",
-        )
-        updated_plan[state.current_step_index] = updated_step
+        updated_plan = _create_updated_plan(state, current_step, f"Error: {str(e)}")
 
         return {
             "plan": updated_plan,

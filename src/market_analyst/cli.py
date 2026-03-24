@@ -5,6 +5,7 @@ demonstrating all the key features from the blog series.
 """
 
 import argparse
+import json
 import os
 import sys
 import traceback
@@ -34,11 +35,152 @@ from market_analyst.workflows.combined_workflow import (
 from market_analyst.workflows.trade_workflow import approve_trade, run_trade
 
 
+def _get_optional_checkpointer(args):
+    """Get checkpointer if persistence is enabled, or None."""
+    if args.no_persist:
+        return None
+    try:
+        checkpointer = get_checkpointer()
+        print("   ✅ PostgreSQL checkpointing enabled")
+        return checkpointer
+    except Exception as e:
+        print(f"   ⚠️  PostgreSQL not available: {e}")
+        print("   Continuing without persistence...")
+        return None
+
+
+def _parse_force_mode(mode_str):
+    """Map CLI mode string to ExecutionMode enum, printing the selection."""
+    if mode_str == "deep":
+        print("   📊 Mode: Deep Research (ReAct) - forced")
+        return ExecutionMode.DEEP_RESEARCH
+    if mode_str == "flash":
+        print("   ⚡ Mode: Flash Briefing (ReWOO) - forced")
+        return ExecutionMode.FLASH_BRIEFING
+    print("   🔀 Mode: Auto (router will classify intent)")
+    return None
+
+
+def _require_thread_id(args, flag_name):
+    """Exit with error if --thread-id is not provided."""
+    if not args.thread_id:
+        print(f"❌ Error: --thread-id required with {flag_name}")
+        sys.exit(1)
+
+
+def _dispatch_simple_commands(args):
+    """Dispatch simple commands that need no validation. Returns True if handled."""
+    if args.list_reports:
+        list_reports_command(args)
+        return True
+    if args.search_reports:
+        search_reports_command(args)
+        return True
+    if args.show_report:
+        show_report_command(args)
+        return True
+    if args.set_profile:
+        set_user_profile(args)
+        return True
+    return False
+
+
+def _dispatch_validated_commands(args):
+    """Dispatch commands that require argument validation. Returns True if handled."""
+    if args.approve:
+        _require_thread_id(args, "--approve")
+        approve_report(args)
+        return True
+    if args.approve_trade or args.reject_trade:
+        _require_thread_id(args, "--approve-trade/--reject-trade")
+        handle_trade_approval(args)
+        return True
+    if args.trade:
+        if not args.action or not args.ticker or args.amount is None:
+            print("❌ Error: --trade requires --action, --ticker, and --amount")
+            print("   Example: --trade --action buy --ticker NVDA --amount 5000")
+            sys.exit(1)
+        run_trade_command(args)
+        return True
+    if args.resume:
+        _require_thread_id(args, "--resume")
+        resume_analysis(args)
+        return True
+    return False
+
+
+def _print_combined_result(result, thread_id, args):
+    """Print the result of a combined workflow run."""
+    if result.get("requires_report_approval"):
+        print("\n" + "=" * 60)
+        print("⏸️  PAUSED - Awaiting report approval")
+        print("=" * 60)
+        if result.get("draft_report"):
+            print(format_report_for_display(result["draft_report"]))
+        if args.no_persist:
+            print("\n⚠️  Running with --no-persist: approval workflow disabled")
+            print("   (Run without --no-persist to enable approval workflow)")
+        else:
+            print("\nTo approve the report and continue to trade:")
+            print(f"  uv run market-analyst --approve --combined --thread-id {thread_id}")
+        return
+
+    if result.get("requires_trade_approval"):
+        print("\n" + "=" * 60)
+        print("⏸️  TRADE PAUSED - Awaiting human approval")
+        print("=" * 60)
+        guardian_result = result.get("guardian_result")
+        if guardian_result:
+            print(f"\n   Policy: {guardian_result.policy_name}")
+            print(f"   Reason: {guardian_result.reason}")
+        if args.no_persist:
+            print("\n⚠️  Running with --no-persist: approval workflow disabled")
+        else:
+            print("\nTo approve this trade:")
+            print(f"  uv run market-analyst --approve-trade --thread-id {thread_id}")
+            print("\nTo reject this trade:")
+            print(f"  uv run market-analyst --reject-trade --thread-id {thread_id}")
+        return
+
+    if result.get("trade_executed"):
+        print("\n" + "=" * 60)
+        print("🎉 Combined workflow complete!")
+        print("=" * 60)
+        print("   ✅ Report published")
+        print("   ✅ Trade executed")
+        return
+
+    guardian_result = result.get("guardian_result")
+    if guardian_result and guardian_result.decision.value == "reject":
+        print(f"\n❌ Trade blocked by Guardian: {guardian_result.reason}")
+    else:
+        print("\n✅ Analysis complete (no trade action - hold recommendation)")
+
+    if result.get("draft_report"):
+        print(format_report_for_display(result["draft_report"]))
+
+
 def list_reports_command(args):
     """List all saved reports from document memory."""
     try:
         doc_memory = get_document_memory()
         reports = doc_memory.list_docs(namespace="research")
+
+        if getattr(args, "json", False):
+            items = []
+            for doc in reports:
+                metadata = doc.get("metadata", {})
+                items.append(
+                    {
+                        "key": doc.get("key"),
+                        "ticker": metadata.get("ticker"),
+                        "execution_mode": metadata.get("execution_mode"),
+                        "created_at": doc.get("created_at"),
+                        "path": doc.get("path"),
+                    }
+                )
+            print(json.dumps(items))
+            return
 
         if not reports:
             print("\n📋 No reports found in document memory")
@@ -74,6 +216,21 @@ def search_reports_command(args):
         doc_memory = get_document_memory()
         results = doc_memory.search_docs(namespace="research", query=args.search_reports)
 
+        if getattr(args, "json", False):
+            items = []
+            for doc in results:
+                metadata = doc.get("metadata", {})
+                items.append(
+                    {
+                        "key": doc.get("key"),
+                        "ticker": metadata.get("ticker"),
+                        "execution_mode": metadata.get("execution_mode"),
+                        "created_at": doc.get("created_at"),
+                    }
+                )
+            print(json.dumps(items))
+            return
+
         if not results:
             print(f"\n🔍 No reports found matching '{args.search_reports}'")
             return
@@ -108,9 +265,24 @@ def show_report_command(args):
         doc = doc_memory.read_doc(namespace="research", key=args.show_report)
 
         if not doc:
-            print(f"\n❌ Report '{args.show_report}' not found")
-            print("\n💡 Use --list-reports to see available reports")
+            if getattr(args, "json", False):
+                print(json.dumps({"error": f"Report '{args.show_report}' not found"}))
+            else:
+                print(f"\n❌ Report '{args.show_report}' not found")
+                print("\n💡 Use --list-reports to see available reports")
             sys.exit(1)
+
+        if getattr(args, "json", False):
+            print(
+                json.dumps(
+                    {
+                        "key": args.show_report,
+                        "content": doc.get("content", ""),
+                        "metadata": doc.get("metadata", {}),
+                    }
+                )
+            )
+            return
 
         print("\n" + "=" * 60)
         print(doc["content"])
@@ -255,6 +427,9 @@ Examples:
         help="Display a specific report by key",
     )
 
+    # Output format
+    parser.add_argument("--json", action="store_true", help="Output results as JSON (for machine consumption)")
+
     # Debugging
     parser.add_argument("--verbose", "-v", action="store_true", help="Enable verbose output")
     parser.add_argument(
@@ -272,55 +447,7 @@ Examples:
             print("   Copy .env.example to .env and add your API key")
             sys.exit(1)
 
-    # Handle memory queries
-    if args.list_reports:
-        list_reports_command(args)
-        return
-
-    if args.search_reports:
-        search_reports_command(args)
-        return
-
-    if args.show_report:
-        show_report_command(args)
-        return
-
-    # Handle profile setting
-    if args.set_profile:
-        set_user_profile(args)
-        return
-
-    # Handle approval
-    if args.approve:
-        if not args.thread_id:
-            print("❌ Error: --thread-id required with --approve")
-            sys.exit(1)
-        approve_report(args)
-        return
-
-    # Handle trade approval
-    if args.approve_trade or args.reject_trade:
-        if not args.thread_id:
-            print("❌ Error: --thread-id required with --approve-trade/--reject-trade")
-            sys.exit(1)
-        handle_trade_approval(args)
-        return
-
-    # Handle trade execution
-    if args.trade:
-        if not args.action or not args.ticker or args.amount is None:
-            print("❌ Error: --trade requires --action, --ticker, and --amount")
-            print("   Example: --trade --action buy --ticker NVDA --amount 5000")
-            sys.exit(1)
-        run_trade_command(args)
-        return
-
-    # Handle resume
-    if args.resume:
-        if not args.thread_id:
-            print("❌ Error: --thread-id required with --resume")
-            sys.exit(1)
-        resume_analysis(args)
+    if _dispatch_simple_commands(args) or _dispatch_validated_commands(args):
         return
 
     # Normal analysis
@@ -328,7 +455,6 @@ Examples:
         parser.print_help()
         sys.exit(1)
 
-    # Handle combined workflow
     if args.combined:
         run_combined_command(args)
         return
@@ -367,6 +493,35 @@ def set_user_profile(args):
         print("   Profile will use defaults")
 
 
+def _print_analysis_result(result, args, thread_id):
+    """Print the result of a stock analysis."""
+    if args.show_plan:
+        print("\n📋 Research Plan:")
+        for step in result["state"].get("plan", []):
+            status = "✅" if step.completed else "⏳"
+            print(f"   {status} Step {step.step_number}: {step.description}")
+
+    if result.get("requires_approval"):
+        print("\n" + "=" * 60)
+        print("⏸️  PAUSED - Awaiting your approval")
+        print("=" * 60)
+        if result.get("draft_report"):
+            print(format_report_for_display(result["draft_report"]))
+        if args.no_persist:
+            print("\n⚠️  Running with --no-persist: approval workflow disabled")
+            print("   (Run without --no-persist to enable save/approve workflow)")
+            print("\n✅ Analysis complete (auto-approved in no-persist mode)")
+        else:
+            print("\nTo approve and publish:")
+            print(f"  uv run market-analyst --approve --thread-id {thread_id}")
+            print("\nTo edit and approve:")
+            print(f"  uv run market-analyst --approve --thread-id {thread_id} --edit-recommendation hold")
+    else:
+        print("\n✅ Analysis complete!")
+        if result.get("draft_report"):
+            print(format_report_for_display(result["draft_report"]))
+
+
 def run_new_analysis(args):
     """Run a new stock analysis."""
 
@@ -377,30 +532,10 @@ def run_new_analysis(args):
     print(f"   User ID: {args.user_id}")
     print("-" * 60)
 
-    # Get checkpointer if persistence is enabled
-    checkpointer = None
-    if not args.no_persist:
-        try:
-            checkpointer = get_checkpointer()
-            print("   ✅ PostgreSQL checkpointing enabled")
-        except Exception as e:
-            print(f"   ⚠️  PostgreSQL not available: {e}")
-            print("   Continuing without persistence...")
-
-    # Set model selection for nodes to use
+    checkpointer = _get_optional_checkpointer(args)
     os.environ[MODEL_ENV_VAR] = MODEL_MAP[args.model]
     print(f"   🤖 Using model: {args.model}")
-
-    # Map CLI mode arg to ExecutionMode
-    force_mode = None
-    if args.mode == "deep":
-        force_mode = ExecutionMode.DEEP_RESEARCH
-        print("   📊 Mode: Deep Research (ReAct) - forced")
-    elif args.mode == "flash":
-        force_mode = ExecutionMode.FLASH_BRIEFING
-        print("   ⚡ Mode: Flash Briefing (ReWOO) - forced")
-    else:
-        print("   🔀 Mode: Auto (router will classify intent)")
+    force_mode = _parse_force_mode(args.mode)
 
     try:
         result = run_analysis(
@@ -410,35 +545,7 @@ def run_new_analysis(args):
             checkpointer=checkpointer,
             force_mode=force_mode,
         )
-
-        if args.show_plan:
-            print("\n📋 Research Plan:")
-            for step in result["state"].get("plan", []):
-                status = "✅" if step.completed else "⏳"
-                print(f"   {status} Step {step.step_number}: {step.description}")
-
-        if result.get("requires_approval"):
-            print("\n" + "=" * 60)
-            print("⏸️  PAUSED - Awaiting your approval")
-            print("=" * 60)
-
-            if result.get("draft_report"):
-                print(format_report_for_display(result["draft_report"]))
-
-            if args.no_persist:
-                # Can't approve without persistence - state is not saved
-                print("\n⚠️  Running with --no-persist: approval workflow disabled")
-                print("   (Run without --no-persist to enable save/approve workflow)")
-                print("\n✅ Analysis complete (auto-approved in no-persist mode)")
-            else:
-                print("\nTo approve and publish:")
-                print(f"  uv run market-analyst --approve --thread-id {thread_id}")
-                print("\nTo edit and approve:")
-                print(f"  uv run market-analyst --approve --thread-id {thread_id} --edit-recommendation hold")
-        else:
-            print("\n✅ Analysis complete!")
-            if result.get("draft_report"):
-                print(format_report_for_display(result["draft_report"]))
+        _print_analysis_result(result, args, thread_id)
 
     except KeyboardInterrupt:
         print("\n\n⏸️  Analysis interrupted. Resume with:")
@@ -483,6 +590,61 @@ def resume_analysis(args):
         sys.exit(1)
 
 
+def _approve_combined_report(args, checkpointer):
+    """Handle approval for combined workflow."""
+    result = approve_combined_report(
+        thread_id=args.thread_id,
+        checkpointer=checkpointer,
+    )
+
+    if result.get("published") or result.get("state", {}).get("report_approved"):
+        print("\n🎉 Report published successfully!")
+
+    if result.get("requires_trade_approval"):
+        print("\n" + "=" * 60)
+        print("⏸️  TRADE PAUSED - Awaiting human approval")
+        print("=" * 60)
+        guardian_result = result.get("guardian_result")
+        if guardian_result:
+            print(f"\n   Policy: {guardian_result.policy_name}")
+            print(f"   Reason: {guardian_result.reason}")
+        print("\nTo approve this trade:")
+        print(f"  uv run market-analyst --approve-trade --thread-id {args.thread_id}")
+        print("\nTo reject this trade:")
+        print(f"  uv run market-analyst --reject-trade --thread-id {args.thread_id}")
+    elif result.get("trade_executed"):
+        print("\n" + "=" * 60)
+        print("🎉 Combined workflow complete!")
+        print("=" * 60)
+        print("   ✅ Report published")
+        print("   ✅ Trade executed")
+    else:
+        guardian_result = result.get("guardian_result")
+        if guardian_result and guardian_result.decision.value == "reject":
+            print(f"\n❌ Trade blocked by Guardian: {guardian_result.reason}")
+        else:
+            print("\n✅ Analysis complete (no trade action - hold recommendation)")
+
+
+def _approve_standard_report(args, checkpointer):
+    """Handle approval for standard analysis workflow."""
+    result = approve_and_publish(
+        thread_id=args.thread_id,
+        checkpointer=checkpointer,
+    )
+
+    if result.get("published"):
+        print("\n🎉 Report published successfully!")
+        state = result.get("state", {})
+        draft_report = get_state_attr(state, "draft_report")
+        if draft_report:
+            print(format_report_for_display(draft_report))
+        else:
+            print("\n(No report content to display)")
+    else:
+        print("\n⚠️  Report could not be published")
+
+
 def approve_report(args):
     """Approve and publish a draft report."""
 
@@ -490,74 +652,50 @@ def approve_report(args):
 
     try:
         checkpointer = get_checkpointer()
-
         if args.combined:
-            # Combined workflow: Approve report and continue to trade
-            result = approve_combined_report(
-                thread_id=args.thread_id,
-                checkpointer=checkpointer,
-            )
-
-            if result.get("published") or result.get("state", {}).get("report_approved"):
-                print("\n🎉 Report published successfully!")
-
-            # Check for next steps in combined workflow
-            if result.get("requires_trade_approval"):
-                print("\n" + "=" * 60)
-                print("⏸️  TRADE PAUSED - Awaiting human approval")
-                print("=" * 60)
-
-                guardian_result = result.get("guardian_result")
-                if guardian_result:
-                    print(f"\n   Policy: {guardian_result.policy_name}")
-                    print(f"   Reason: {guardian_result.reason}")
-
-                print("\nTo approve this trade:")
-                print(f"  uv run market-analyst --approve-trade --thread-id {args.thread_id}")
-                print("\nTo reject this trade:")
-                print(f"  uv run market-analyst --reject-trade --thread-id {args.thread_id}")
-
-            elif result.get("trade_executed"):
-                print("\n" + "=" * 60)
-                print("🎉 Combined workflow complete!")
-                print("=" * 60)
-                print("   ✅ Report published")
-                print("   ✅ Trade executed")
-
-            else:
-                # Either no trade (hold) or rejected
-                guardian_result = result.get("guardian_result")
-                if guardian_result and guardian_result.decision.value == "reject":
-                    print(f"\n❌ Trade blocked by Guardian: {guardian_result.reason}")
-                else:
-                    print("\n✅ Analysis complete (no trade action - hold recommendation)")
-
+            _approve_combined_report(args, checkpointer)
         else:
-            # Standard analysis workflow
-            result = approve_and_publish(
-                thread_id=args.thread_id,
-                checkpointer=checkpointer,
-            )
-
-            if result.get("published"):
-                print("\n🎉 Report published successfully!")
-
-                # Display the final report
-                state = result.get("state", {})
-                draft_report = get_state_attr(state, "draft_report")
-
-                if draft_report:
-                    print(format_report_for_display(draft_report))
-                else:
-                    print("\n(No report content to display)")
-            else:
-                print("\n⚠️  Report could not be published")
-
+            _approve_standard_report(args, checkpointer)
     except Exception as e:
         print(f"❌ Error: {e}")
         if args.verbose:
             traceback.print_exc()
         sys.exit(1)
+
+
+def _print_trade_result(result, args):
+    """Print the result of a trade command."""
+    if result.get("error"):
+        print(f"\n❌ Error: {result['error']}")
+        sys.exit(1)
+
+    if result.get("executed"):
+        print("\n🎉 Trade executed successfully!")
+        return
+
+    if result.get("requires_approval"):
+        print("\n" + "=" * 60)
+        print("⏸️  TRADE PAUSED - Awaiting human approval")
+        print("=" * 60)
+        guardian_result = result.get("guardian_result")
+        if guardian_result:
+            print(f"\n   Policy: {guardian_result.policy_name}")
+            print(f"   Reason: {guardian_result.reason}")
+        thread_id = result["thread_id"]
+        if args.no_persist:
+            print("\n⚠️  Running with --no-persist: approval workflow disabled")
+        else:
+            print("\nTo approve this trade:")
+            print(f"  uv run market-analyst --approve-trade --thread-id {thread_id}")
+            print("\nTo approve with modified amount:")
+            print(f"  uv run market-analyst --approve-trade --thread-id {thread_id} --modify-amount 9000")
+            print("\nTo reject this trade:")
+            print(f"  uv run market-analyst --reject-trade --thread-id {thread_id}")
+        return
+
+    guardian_result = result.get("guardian_result")
+    if guardian_result:
+        print(f"\n❌ Trade blocked: {guardian_result.reason}")
 
 
 def run_trade_command(args):
@@ -569,15 +707,7 @@ def run_trade_command(args):
     print(f"   Amount: ${args.amount:,.2f}")
     print("-" * 60)
 
-    # Get checkpointer if persistence is enabled
-    checkpointer = None
-    if not args.no_persist:
-        try:
-            checkpointer = get_checkpointer()
-            print("   ✅ PostgreSQL checkpointing enabled")
-        except Exception as e:
-            print(f"   ⚠️  PostgreSQL not available: {e}")
-            print("   Continuing without persistence...")
+    checkpointer = _get_optional_checkpointer(args)
 
     try:
         result = run_trade(
@@ -587,38 +717,7 @@ def run_trade_command(args):
             reason=args.reason,
             checkpointer=checkpointer,
         )
-
-        if result.get("error"):
-            print(f"\n❌ Error: {result['error']}")
-            sys.exit(1)
-
-        if result.get("executed"):
-            print("\n🎉 Trade executed successfully!")
-        elif result.get("requires_approval"):
-            print("\n" + "=" * 60)
-            print("⏸️  TRADE PAUSED - Awaiting human approval")
-            print("=" * 60)
-
-            guardian_result = result.get("guardian_result")
-            if guardian_result:
-                print(f"\n   Policy: {guardian_result.policy_name}")
-                print(f"   Reason: {guardian_result.reason}")
-
-            thread_id = result["thread_id"]
-            if args.no_persist:
-                print("\n⚠️  Running with --no-persist: approval workflow disabled")
-            else:
-                print("\nTo approve this trade:")
-                print(f"  uv run market-analyst --approve-trade --thread-id {thread_id}")
-                print("\nTo approve with modified amount:")
-                print(f"  uv run market-analyst --approve-trade --thread-id {thread_id} --modify-amount 9000")
-                print("\nTo reject this trade:")
-                print(f"  uv run market-analyst --reject-trade --thread-id {thread_id}")
-        else:
-            # Trade was rejected by Guardian
-            guardian_result = result.get("guardian_result")
-            if guardian_result:
-                print(f"\n❌ Trade blocked: {guardian_result.reason}")
+        _print_trade_result(result, args)
 
     except Exception as e:
         print(f"\n❌ Error: {e}")
@@ -669,30 +768,10 @@ def run_combined_command(args):
     print(f"   User ID: {args.user_id}")
     print("-" * 60)
 
-    # Get checkpointer if persistence is enabled
-    checkpointer = None
-    if not args.no_persist:
-        try:
-            checkpointer = get_checkpointer()
-            print("   ✅ PostgreSQL checkpointing enabled")
-        except Exception as e:
-            print(f"   ⚠️  PostgreSQL not available: {e}")
-            print("   Continuing without persistence...")
-
-    # Set model selection
+    checkpointer = _get_optional_checkpointer(args)
     os.environ[MODEL_ENV_VAR] = MODEL_MAP[args.model]
     print(f"   🤖 Using model: {args.model}")
-
-    # Map CLI mode arg to ExecutionMode
-    force_mode = None
-    if args.mode == "deep":
-        force_mode = ExecutionMode.DEEP_RESEARCH
-        print("   📊 Mode: Deep Research (ReAct) - forced")
-    elif args.mode == "flash":
-        force_mode = ExecutionMode.FLASH_BRIEFING
-        print("   ⚡ Mode: Flash Briefing (ReWOO) - forced")
-    else:
-        print("   🔀 Mode: Auto (router will classify intent)")
+    force_mode = _parse_force_mode(args.mode)
 
     try:
         result = run_combined_analysis(
@@ -703,58 +782,7 @@ def run_combined_command(args):
             force_mode=force_mode,
             trade_amount=args.trade_amount,
         )
-
-        # Check which approval point we stopped at
-        if result.get("requires_report_approval"):
-            print("\n" + "=" * 60)
-            print("⏸️  PAUSED - Awaiting report approval")
-            print("=" * 60)
-
-            if result.get("draft_report"):
-                print(format_report_for_display(result["draft_report"]))
-
-            if args.no_persist:
-                print("\n⚠️  Running with --no-persist: approval workflow disabled")
-                print("   (Run without --no-persist to enable approval workflow)")
-            else:
-                print("\nTo approve the report and continue to trade:")
-                print(f"  uv run market-analyst --approve --combined --thread-id {thread_id}")
-
-        elif result.get("requires_trade_approval"):
-            print("\n" + "=" * 60)
-            print("⏸️  TRADE PAUSED - Awaiting human approval")
-            print("=" * 60)
-
-            guardian_result = result.get("guardian_result")
-            if guardian_result:
-                print(f"\n   Policy: {guardian_result.policy_name}")
-                print(f"   Reason: {guardian_result.reason}")
-
-            if args.no_persist:
-                print("\n⚠️  Running with --no-persist: approval workflow disabled")
-            else:
-                print("\nTo approve this trade:")
-                print(f"  uv run market-analyst --approve-trade --thread-id {thread_id}")
-                print("\nTo reject this trade:")
-                print(f"  uv run market-analyst --reject-trade --thread-id {thread_id}")
-
-        elif result.get("trade_executed"):
-            print("\n" + "=" * 60)
-            print("🎉 Combined workflow complete!")
-            print("=" * 60)
-            print("   ✅ Report published")
-            print("   ✅ Trade executed")
-
-        else:
-            # Either no trade (hold recommendation) or trade rejected
-            guardian_result = result.get("guardian_result")
-            if guardian_result and guardian_result.decision.value == "reject":
-                print(f"\n❌ Trade blocked by Guardian: {guardian_result.reason}")
-            else:
-                print("\n✅ Analysis complete (no trade action - hold recommendation)")
-
-            if result.get("draft_report"):
-                print(format_report_for_display(result["draft_report"]))
+        _print_combined_result(result, thread_id, args)
 
     except KeyboardInterrupt:
         print("\n\n⏸️  Workflow interrupted. Resume with:")

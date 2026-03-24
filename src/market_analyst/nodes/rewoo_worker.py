@@ -9,20 +9,31 @@ from collections.abc import Callable
 from typing import Any
 
 from market_analyst.schemas import AgentState, ReWOOPlanStep
+from market_analyst.tools.cli_tools import cli_list_reports, cli_show_report
+from market_analyst.tools.code_exec import execute_python_analysis
 from market_analyst.tools.search import search_competitors, search_news
+from market_analyst.tools.skills import use_skill
 from market_analyst.tools.stock import (
-    get_company_metrics,
+    get_financials,
     get_price_history,
-    get_stock_price,
+    get_stock_snapshot,
 )
 
 # Tool registry mapping names to functions for ReWOO parallel execution
 TOOL_REGISTRY: dict[str, Callable[..., Any]] = {
-    "get_stock_price": get_stock_price,
-    "get_company_metrics": get_company_metrics,
+    # JSON Tool Calling (modality 1)
+    "get_stock_snapshot": get_stock_snapshot,
     "get_price_history": get_price_history,
+    "get_financials": get_financials,
     "search_news": search_news,
     "search_competitors": search_competitors,
+    # Skills (modality 2)
+    "use_skill": use_skill,
+    # CLI-as-Tool (modality 3)
+    "cli_list_reports": cli_list_reports,
+    "cli_show_report": cli_show_report,
+    # Code Execution / PTC (modality 4)
+    "execute_python_analysis": execute_python_analysis,
 }
 
 

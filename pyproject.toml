@@ -16,6 +16,8 @@ dependencies = [
     "langgraph-checkpoint-redis>=0.3.3",
     "qdrant-client>=1.16.2",
     "gradio>=6.4.0",
+    "tenacity>=8.0.0",
+    "langchain-experimental>=0.3.0",
 ]
 
 [project.scripts]

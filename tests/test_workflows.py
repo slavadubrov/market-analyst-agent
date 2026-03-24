@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from market_analyst.schemas import (
     AgentState,
     DraftReport,
@@ -62,7 +64,16 @@ def test_create_graph_compilation_smoke(mocker):
 
 
 def test_publish_node(mocker):
-    """Test publish node writes report to file."""
+    """Test publish node saves report to document memory and legacy directory."""
+    # Mock DocumentMemory to avoid filesystem side effects
+    mock_doc_memory = mocker.MagicMock()
+    mock_doc_memory.write_doc.return_value = Path("memory/documents/research/test.json")
+    mocker.patch(
+        "market_analyst.workflows.analysis_workflow.get_document_memory",
+        return_value=mock_doc_memory,
+    )
+
+    # Mock legacy reports/ directory writes
     mock_mkdir = mocker.patch("pathlib.Path.mkdir")
     mock_write = mocker.patch("pathlib.Path.write_text")
 
@@ -78,11 +89,18 @@ def test_publish_node(mocker):
         risk_factors=["Risk 1"],
     )
     state.execution_mode = ExecutionMode.DEEP_RESEARCH
+    state.user_id = "test-user"
 
     result = publish_node(state)
 
     assert result["report_approved"] is True
-    mock_mkdir.assert_called_once()
+    # Document memory should be called once to save the report
+    mock_doc_memory.write_doc.assert_called_once()
+    call_kwargs = mock_doc_memory.write_doc.call_args
+    assert call_kwargs.kwargs["namespace"] == "research"
+    assert "AAPL" in call_kwargs.kwargs["key"]
+    # Legacy directory should also be created and written
+    mock_mkdir.assert_called_once_with(exist_ok=True)
     mock_write.assert_called_once()
 
 
