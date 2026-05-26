@@ -71,17 +71,17 @@ The agent demonstrates **four distinct tool modalities**, following [ACI (Agent-
 
 ### Workflows
 
-**1. Analysis Workflow** — Router -> [ReAct or ReWOO] -> Reporter -> Publish (with HITL approval)
+**1. Analysis Workflow** — Router -> [ReAct or ReWOO] -> Reporter/Solver -> Evaluator -> Publish (with HITL approval)
 
 ![Analysis Workflow](docs/analysis_workflow.svg)
 
-**2. Trade Workflow** — Guardian policy engine -> Auto-approve / Escalate / Reject
+**2. Trade Workflow** — Guardian policy engine -> Auto-approve / Escalate to Compliance Officer / Reject
 
 ![Trade Workflow](docs/trade_workflow.svg)
 
-**3. Combined Workflow** — Analysis -> Report Approval -> Guardian -> Trade Execution
+**3. Combined Workflow** — Analysis -> Evaluator -> Report Approval -> Create Trade -> Guardian -> Trade Execution
 
-![Combined Architecture](docs/combined_workflow.svg)
+![Combined Workflow](docs/combined_workflow.svg)
 
 ---
 
@@ -248,7 +248,7 @@ uv run market-analyst --trade --action delete_logs --ticker NVDA --amount 0
 ### Combined Workflow (Full Demo)
 
 ```bash
-# Analysis -> Report Approval -> Guardian -> Trade
+# Analysis -> Evaluator -> Report Approval -> Create Trade -> Guardian -> Trade
 uv run market-analyst "Analyze NVDA for investment" --combined --trade-amount 5000
 ```
 
@@ -273,7 +273,8 @@ src/market_analyst/
 │   ├── rewoo_worker.py        # Parallel tool execution
 │   ├── rewoo_solver.py        # Result synthesis
 │   ├── reporter.py            # Report generation
-│   └── guardian.py            # Policy-as-Code safety layer
+│   ├── guardian.py            # Policy-as-Code safety layer
+│   └── trade_executor.py      # Simulated, idempotent trade execution
 ├── tools/
 │   ├── stock.py               # JSON tools: get_stock_snapshot, get_price_history, get_financials
 │   ├── search.py              # JSON tools: search_news, search_competitors
@@ -285,7 +286,14 @@ src/market_analyst/
 │   ├── analysis_workflow.py   # Main analysis graph
 │   ├── trade_workflow.py      # Guardian + HITL trade graph
 │   └── combined_workflow.py   # End-to-end chained workflow
-├── memory.py                  # Three-tier memory (PostgreSQL, Qdrant, DocumentMemory)
+├── runtime/
+│   ├── evaluator.py           # Fresh-context report evaluator
+│   ├── queue.py               # Redis Streams queue producer/consumer helpers
+│   ├── worker.py              # Background worker loop
+│   └── harness.py             # Runtime wrapper for CLI and worker runs
+├── memory/                    # Hot, cold, and document memory implementations
+├── mcp_server/                # MCP sidecar exposing data tools
+├── observability/             # OTel tracing, metrics, and budget callbacks
 ├── schemas.py                 # Pydantic state models
 ├── cli.py                     # CLI entry point
 └── app.py                     # Gradio web UI
