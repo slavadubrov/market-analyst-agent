@@ -8,6 +8,10 @@ import concurrent.futures
 from collections.abc import Callable
 from typing import Any
 
+from langchain_core.runnables import RunnableConfig
+
+from market_analyst.nodes._telemetry import AGENT_NS, get_conversation_id
+from market_analyst.observability import tool_span
 from market_analyst.schemas import AgentState, ReWOOPlanStep
 from market_analyst.tools.cli_tools import cli_list_reports, cli_show_report
 from market_analyst.tools.code_exec import execute_python_analysis
@@ -37,15 +41,22 @@ TOOL_REGISTRY: dict[str, Callable[..., Any]] = {
 }
 
 
-def execute_tool(step: ReWOOPlanStep, results: dict[str, str]) -> str:
+def execute_tool(
+    step: ReWOOPlanStep,
+    results: dict[str, str],
+    *,
+    conversation_id: str | None = None,
+) -> str:
     """Execute a single tool call, substituting variable references.
 
     Args:
-        step: The planned step to execute
-        results: Already-computed results keyed by step_id
+        step: The planned step to execute.
+        results: Already-computed results keyed by step_id.
+        conversation_id: LangGraph ``thread_id`` for span correlation. Optional
+            so the function still works when called directly in tests.
 
     Returns:
-        Tool execution result as string
+        Tool execution result as string.
     """
     tool_fn = TOOL_REGISTRY.get(step.tool_name)
     if not tool_fn:
@@ -60,9 +71,18 @@ def execute_tool(step: ReWOOPlanStep, results: dict[str, str]) -> str:
         else:
             resolved_args[key] = value
 
+    # tool_span emits gen_ai.execute_tool with the standard attributes and
+    # bumps the Prometheus tool-call counters on the way out. Errors propagate
+    # to the span as Status.ERROR but we still return a string here so the
+    # solver downstream can include the failure message in its context.
     try:
-        result = tool_fn.invoke(resolved_args)
-        # Handle Pydantic model results
+        with tool_span(
+            tool_name=step.tool_name,
+            agent_name=f"{AGENT_NS}.rewoo_worker",
+            conversation_id=conversation_id,
+            tool_call_id=step.step_id,
+        ):
+            result = tool_fn.invoke(resolved_args)
         if hasattr(result, "model_dump_json"):
             return result.model_dump_json()
         return str(result)
@@ -70,7 +90,9 @@ def execute_tool(step: ReWOOPlanStep, results: dict[str, str]) -> str:
         return f"Error executing {step.tool_name}: {e}"
 
 
-def rewoo_worker_node(state: AgentState) -> dict:
+def rewoo_worker_node(
+    state: AgentState, config: RunnableConfig | None = None
+) -> dict:
     """Execute all planned tool calls with parallel execution where possible.
 
     This node:
@@ -80,6 +102,7 @@ def rewoo_worker_node(state: AgentState) -> dict:
 
     Args:
         state: Current state with rewoo_plan
+        config: LangGraph runtime config; used to pull ``thread_id`` for tracing.
 
     Returns:
         Updated state with tool results stored in rewoo_plan steps
@@ -88,6 +111,8 @@ def rewoo_worker_node(state: AgentState) -> dict:
         return {"error": "No ReWOO plan to execute"}
 
     print(f"\n🔧 Executing {len(state.rewoo_plan)} tool calls...")
+
+    conversation_id = get_conversation_id(config)
 
     # Separate steps into those with and without dependencies
     results: dict[str, str] = {}
@@ -102,7 +127,10 @@ def rewoo_worker_node(state: AgentState) -> dict:
         print(f"   ⚡ Executing {len(independent_steps)} independent tools in parallel...")
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
-            future_to_step = {executor.submit(execute_tool, step, results): step for step in independent_steps}
+            future_to_step = {
+                executor.submit(execute_tool, step, results, conversation_id=conversation_id): step
+                for step in independent_steps
+            }
 
             for future in concurrent.futures.as_completed(future_to_step):
                 step = future_to_step[future]
@@ -132,7 +160,7 @@ def rewoo_worker_node(state: AgentState) -> dict:
         if missing_deps:
             print(f"   ⚠️  {step.step_id}: Missing dependencies {missing_deps}")
 
-        result = execute_tool(step, results)
+        result = execute_tool(step, results, conversation_id=conversation_id)
         results[step.step_id] = result
 
         updated_step = ReWOOPlanStep(

@@ -1,0 +1,43 @@
+# Prometheus alert rules tied to the article's "Cost-control failures" row.
+#
+# - BudgetKillTriggered: any kill-switch firing is interesting in dev and
+#   page-worthy in production.
+# - HighToolErrorRate: more than 5 tool errors per minute over 5 minutes is
+#   the "circuit breaker" condition the agent enforces in-process.
+# - StuckOnLLMCalls: p95 LLM latency above 60s for 10 minutes is a sign the
+#   model is rate-limited or the harness is wedged.
+
+groups:
+  - name: market-analyst-agent
+    rules:
+      - alert: BudgetKillTriggered
+        expr: rate(market_analyst_budget_kill_total[5m]) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "A run hit its token/tool budget kill switch ({{ $labels.reason }})"
+          description: "Budget kill counter is non-zero in the last 5 minutes."
+
+      - alert: HighToolErrorRate
+        expr: rate(market_analyst_tool_errors_total[5m]) > 5/60
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Tool error rate is elevated"
+          description: "More than 5 tool errors per minute for 5 minutes."
+
+      - alert: SlowLLMCalls
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le, gen_ai_request_model) (
+              rate(gen_ai_client_operation_duration_seconds_bucket{gen_ai_operation_name="chat"}[5m])
+            )
+          ) > 60
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "p95 LLM latency >60s on {{ $labels.gen_ai_request_model }}"
+          description: "Model is likely rate-limited or the upstream is degraded."

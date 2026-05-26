@@ -9,9 +9,11 @@ import os
 
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.runnables import RunnableConfig
 from langgraph.prebuilt import create_react_agent
 
 from market_analyst.constants import DEFAULT_MODEL, MODEL_ENV_VAR
+from market_analyst.nodes._telemetry import node_callbacks
 from market_analyst.schemas import AgentState, PlanStep
 from market_analyst.tools.cli_tools import cli_list_reports, cli_show_report
 from market_analyst.tools.code_exec import execute_python_analysis
@@ -111,7 +113,7 @@ def _update_research_data(state, result, current_step, step_result):
     return research_data
 
 
-def executor_node(state: AgentState) -> dict:
+def executor_node(state: AgentState, config: RunnableConfig | None = None) -> dict:
     """Execute the current step in the research plan.
 
     This node:
@@ -152,7 +154,8 @@ Complete this step and summarize your findings concisely."""
                     SystemMessage(content=EXECUTOR_SYSTEM_PROMPT),
                     HumanMessage(content=task_message),
                 ]
-            }
+            },
+            config={"callbacks": node_callbacks(node_name="executor", config=config)},
         )
 
         final_message = result["messages"][-1]

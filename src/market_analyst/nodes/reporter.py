@@ -8,8 +8,10 @@ import os
 
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.runnables import RunnableConfig
 
 from market_analyst.constants import DEFAULT_MODEL, MODEL_ENV_VAR
+from market_analyst.nodes._telemetry import node_callbacks
 from market_analyst.schemas import AgentState, DraftReport
 
 REPORTER_SYSTEM_PROMPT = """You are a senior investment analyst writing a research report.
@@ -29,7 +31,7 @@ Be objective and data-driven. Acknowledge uncertainties.
 Output your report as structured JSON matching the DraftReport schema."""
 
 
-def reporter_node(state: AgentState) -> dict:
+def reporter_node(state: AgentState, config: RunnableConfig | None = None) -> dict:
     """Generate a draft investment report from research findings.
 
     This node:
@@ -41,6 +43,7 @@ def reporter_node(state: AgentState) -> dict:
 
     Args:
         state: Current agent state with completed research
+        config: LangGraph runtime config; used to pull ``thread_id`` for tracing.
 
     Returns:
         Updated state with draft_report
@@ -89,7 +92,10 @@ Generate a complete DraftReport with your analysis and recommendation."""
     print(f"\n📝 Generating investment report for {ticker}...")
 
     try:
-        report: DraftReport = structured_llm.invoke(messages)
+        report: DraftReport = structured_llm.invoke(
+            messages,
+            config={"callbacks": node_callbacks(node_name="reporter", config=config)},
+        )
 
         return {
             "draft_report": report,

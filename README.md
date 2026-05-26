@@ -12,8 +12,9 @@ This project implements the full agentic stack across three dimensions:
 |-----------|-------------------|---------|
 | **Reasoning** | ReAct, ReWOO, Plan-and-Execute, Router | [Part 1: The Cognitive Engine](https://slavadubrov.github.io/blog/2026/01/31/the-cognitive-engine-choosing-the-right-reasoning-loop/) |
 | **Memory** | Hot (PostgreSQL), Cold (Qdrant), Document (file-based) | [Part 2: The Cortex](https://slavadubrov.github.io/blog/2026/02/14/the-cortex--architecting-memory-for-ai-agents/) |
-| **Tools** | JSON Tool Calling, Skills, CLI-as-Tool, Code Execution | Part 3: The Hands (WIP) |
-| **Safety** | Guardian pattern, HITL escalation, policy automation | Part 4: Safety Layers (coming soon) |
+| **Tools** | JSON Tool Calling, Skills, CLI-as-Tool, Code Execution | [Part 3: The Hands](https://slavadubrov.github.io/blog/2026/03/24/the-hands--tool-ergonomics-and-the-agent-computer-interface/) |
+| **Safety** | Guardian pattern, HITL escalation, policy automation | [Part 4: The Guardians](https://slavadubrov.github.io/blog/2026/04/20/the-guardians--why-agent-security-is-not-llm-safety/) |
+| **Habitat** | OTel + GenAI conventions, MCP sidecar, idempotency, evaluator, queue+worker, debug bundles | [Part 5: The Habitat](https://slavadubrov.github.io/blog/2026/05/22/the-habitat-running-agents-for-hours-not-seconds/) |
 
 ---
 
@@ -301,9 +302,9 @@ skills/
 |---------|----------|---------------------|
 | [**Part 1: The Cognitive Engine**](https://slavadubrov.github.io/blog/2026/01/31/the-cognitive-engine-choosing-the-right-reasoning-loop/) | Reasoning loops: ReAct vs ReWOO vs Plan-and-Execute | `router.py` -> `planner.py` + `executor.py` (ReAct) or `rewoo_*.py` (ReWOO) |
 | [**Part 2: The Cortex**](https://slavadubrov.github.io/blog/2026/02/14/the-cortex--architecting-memory-for-ai-agents/) | Three-tier memory, checkpointing, retention policies | PostgreSQL (hot), Qdrant (cold), DocumentMemory (file-based) |
-| **Part 3: The Hands** (WIP) | ACI design, 4 tool modalities, Pydantic validation | `tools/` — JSON, Skills, CLI-as-Tool, Code Execution |
-| **Part 4: Safety Layers** | Guardian pattern, HITL escalation, policy automation | `guardian.py` + `trade_workflow.py` |
-| **Part 5: Production** | Container deployment, observability | `docker/docker-compose.yml` |
+| [**Part 3: The Hands**](https://slavadubrov.github.io/blog/2026/03/24/the-hands--tool-ergonomics-and-the-agent-computer-interface/) | ACI design, 4 tool modalities, Pydantic validation | `tools/` — JSON, Skills, CLI-as-Tool, Code Execution |
+| [**Part 4: The Guardians**](https://slavadubrov.github.io/blog/2026/04/20/the-guardians--why-agent-security-is-not-llm-safety/) | Guardian pattern, HITL escalation, policy automation | `guardian.py` + `trade_workflow.py` |
+| [**Part 5: The Habitat**](https://slavadubrov.github.io/blog/2026/05/22/the-habitat-running-agents-for-hours-not-seconds/) | Session/harness/sandbox/checkpoint/trace primitives; OTel + GenAI conventions; idempotency; debug bundles; queue+worker shape; MCP sidecar | `observability/`, `runtime/`, `mcp_server/`, `docker/observability/`, queue worker (`runtime/worker.py`) |
 
 ---
 
@@ -320,6 +321,117 @@ skills/
 | `POSTGRES_PASSWORD` | No | PostgreSQL password | `analyst_pass` |
 | `QDRANT_HOST` | No | Qdrant host | `localhost` |
 | `QDRANT_PORT` | No | Qdrant port | `6333` |
+
+---
+
+## Part 5: The Habitat — Runtime, Observability, Production-Hardening
+
+Part 5 covers everything that lives *outside* the agent: durable sessions,
+crash-safe checkpoints, sandboxes, traces, and the production-grade plumbing
+that turns a 30-second request handler into a six-hour background worker.
+
+### The five primitives (article §"Five Primitives")
+
+| Primitive | Where it lives in this repo |
+|-----------|------------------------------|
+| **Session** | LangGraph `thread_id` + PostgreSQL `PostgresSaver` (`src/market_analyst/memory/postgres_store.py`) |
+| **Harness** | `runtime/harness.py` + the LangGraph `StateGraph` in `workflows/` |
+| **Sandbox** | Per-thread workspace at `./workspaces/${THREAD_ID}` (`runtime/workspace.py`) |
+| **Checkpoint** | Same `PostgresSaver`, optionally wrapped with `EncryptedSerializer` |
+| **Trace** | OpenTelemetry GenAI spans emitted by `observability/langchain_callback.py` |
+
+### Failure mitigations (article §"Failure Modes the Runtime Has to Handle")
+
+| Failure mode | Where the mitigation lives |
+|--------------|----------------------------|
+| Premature completion | `runtime/evaluator.py` — fresh-context evaluator subagent (default-FAIL) |
+| Stuck loops / retry storms | `observability/budget.py` — circuit breaker on consecutive tool errors |
+| Runaway token / tool cost | `observability/budget.py` — per-run token + tool-call budgets + kill switch |
+| Non-idempotent tool calls | `runtime/idempotency.py` — filesystem-backed key store; trade executor uses it |
+| Lost work after crash | LangGraph PostgresSaver checkpoint + `runtime/initializer.py` boot hook |
+| Workspace drift | Per-`thread_id` workspace mount |
+| Feature amnesia across context windows | `PROGRESS.md` + `feature-list.json` via `runtime/initializer.py` |
+
+### Observability stack
+
+```bash
+# Bring up OTel Collector + Tempo + Loki + Prometheus + Grafana
+make observability-up
+
+# Then point the worker at the collector
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+export METRICS_ENABLED=true
+uv run market-analyst "Analyze NVDA stock"
+```
+
+Grafana lands on http://localhost:3000 (anonymous admin, dev only) with a
+preloaded *Market Analyst — Overview* dashboard. Prometheus is on :9090,
+Tempo on :3200, Loki on :3100. Alert rules in
+`docker/observability/alerts.yml` cover budget-kill triggers, tool-error
+rate, and slow LLM calls.
+
+Span attributes follow the OpenTelemetry [GenAI semantic conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/)
+(`gen_ai.operation.name`, `gen_ai.provider.name`, `gen_ai.request.model`,
+`gen_ai.conversation.id` = the LangGraph `thread_id`, etc.).
+
+### MCP sidecar (secret-broker pattern)
+
+```bash
+# Bring up the sidecar that holds API tokens; the worker calls it via MCP
+make mcp-up
+```
+
+The sidecar (`src/market_analyst/mcp_server/`) re-exposes the data tools
+(`get_stock_snapshot`, `search_news`, …) over MCP. Production deployments
+pull tokens from Vault / AWS Secrets Manager into the sidecar; the worker
+container never sees them.
+
+### Queue + worker shape (article §"Queue + Worker + Checkpoint DB")
+
+```bash
+# Producer: any CLI invocation
+# Consumer: a dedicated worker loop on Redis Streams
+make worker          # starts python -m market_analyst.runtime.worker
+make queue-push      # XADDs one test job onto market_analyst:runs
+```
+
+`runtime/queue.py` and `runtime/worker.py` implement the queue half. The
+worker uses the same `harness_run` context the CLI uses, so a crashed
+worker writes the same debug bundle to `./workspaces/${THREAD_ID}/_debug/`
+that the CLI would.
+
+### Debug bundle on failure
+
+On any uncaught exception the harness drops a debug bundle:
+
+```
+workspaces/<thread_id>/_debug/
+├── last_state.json
+├── error.txt
+├── tool_calls.csv
+├── env.txt
+├── workspace.tar.gz
+└── PROGRESS.md
+```
+
+The CLI prints the bundle path on failure — that bundle is what you'd hand
+to an oncall engineer (or another agent) when investigating a long-run
+failure.
+
+### What has to change before this goes to production
+
+(From the article's "What Has to Change Before This Goes to Production" list.)
+
+1. Move database passwords out of `.env` and into a secrets manager.
+2. Replace Grafana's anonymous admin with OAuth / SAML.
+3. Enable TLS between every hop that crosses a trust boundary.
+4. Pin CPU/RAM limits per service and tune Postgres `shared_buffers`.
+5. Wire `pg_basebackup` / `wal-g`; ship Qdrant snapshots to object storage.
+6. Mount one volume per `thread_id` (or hand the workspace to a per-task
+   Daytona / Runloop sandbox).
+7. Move MCP tokens into Vault; the sidecar fetches per session.
+8. Set `CHECKPOINT_ENCRYPTION_KEY` and `LANGGRAPH_STRICT_MSGPACK=true` for
+   the Postgres checkpointer.
 
 ---
 
