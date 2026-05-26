@@ -145,7 +145,7 @@ def test_create_trade_graph_smoke(mocker):
 
 
 def test_create_trade_from_report_node(mocker):
-    """Test trade creation from report recommendation."""
+    """Test trade creation from report recommendation uses state.trade_amount."""
     state = mocker.MagicMock(spec=AgentState)
     state.draft_report = DraftReport(
         title="Test Report",
@@ -156,9 +156,7 @@ def test_create_trade_from_report_node(mocker):
         analysis="...",
         risk_factors=[],
     )
-
-    # Hack to mock the _trade_amount attribute that is dynamically added
-    state._trade_amount = 2000.0
+    state.trade_amount = 2000.0
 
     result = create_trade_from_report_node(state)
 
@@ -167,6 +165,27 @@ def test_create_trade_from_report_node(mocker):
     assert trade.action == TradeAction.BUY
     assert trade.ticker == "NVDA"
     assert trade.amount_usd == 2000.0
+
+
+def test_create_trade_from_report_node_defaults_when_unset(mocker):
+    """When state.trade_amount is None, the bridge falls back to the default."""
+    from market_analyst.workflows.combined_workflow import DEFAULT_TRADE_AMOUNT
+
+    state = mocker.MagicMock(spec=AgentState)
+    state.draft_report = DraftReport(
+        title="Test Report",
+        ticker="MSFT",
+        recommendation="buy",
+        confidence=0.7,
+        summary="Buy",
+        analysis="...",
+        risk_factors=[],
+    )
+    state.trade_amount = None
+
+    result = create_trade_from_report_node(state)
+
+    assert result["pending_trade"].amount_usd == DEFAULT_TRADE_AMOUNT
 
 
 def test_create_combined_graph_smoke(mocker):

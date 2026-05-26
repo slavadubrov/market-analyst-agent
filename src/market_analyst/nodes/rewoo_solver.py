@@ -8,9 +8,11 @@ import os
 
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel, Field
 
 from market_analyst.constants import DEFAULT_MODEL, MODEL_ENV_VAR
+from market_analyst.nodes._telemetry import node_callbacks
 from market_analyst.schemas import AgentState, DraftReport
 
 REWOO_SOLVER_PROMPT = """You are a senior investment analyst creating a quick briefing.
@@ -34,7 +36,7 @@ class FlashBriefingOutput(BaseModel):
     risk_factors: list[str] = Field(description="Top 2-3 risk factors")
 
 
-def rewoo_solver_node(state: AgentState) -> dict:
+def rewoo_solver_node(state: AgentState, config: RunnableConfig | None = None) -> dict:
     """Synthesize all tool results into a flash briefing.
 
     This node makes ONE LLM call to create the final output,
@@ -42,6 +44,7 @@ def rewoo_solver_node(state: AgentState) -> dict:
 
     Args:
         state: Current state with rewoo_plan containing tool results
+        config: LangGraph runtime config; used to pull ``thread_id`` for tracing.
 
     Returns:
         Updated state with draft_report
@@ -90,7 +93,10 @@ Create a flash briefing from this data. Be concise and actionable."""
 
     try:
         print("\n📝 Synthesizing flash briefing...")
-        result: FlashBriefingOutput = structured_llm.invoke(messages)
+        result: FlashBriefingOutput = structured_llm.invoke(
+            messages,
+            config={"callbacks": node_callbacks(node_name="rewoo_solver", config=config)},
+        )
 
         # Convert to DraftReport format for consistency with the publish flow
         draft_report = DraftReport(

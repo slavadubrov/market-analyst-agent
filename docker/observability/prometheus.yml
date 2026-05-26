@@ -1,0 +1,29 @@
+# Prometheus — scrapes the worker's /metrics endpoint every 15s. The worker
+# binds METRICS_PORT (default 9464, matching the OTel collector's prometheus
+# receiver convention) when METRICS_ENABLED=true.
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: market-analyst-dev
+
+scrape_configs:
+  - job_name: market-analyst-agent
+    static_configs:
+      - targets:
+          - app:9464
+        labels:
+          service: market-analyst-agent
+
+  # OTel Collector exposes its own /metrics for self-observability.
+  - job_name: otel-collector
+    static_configs:
+      - targets:
+          - otel-collector:8888
+        labels:
+          service: otel-collector
+
+# Alert rules live alongside the config so they ship with the repo.
+rule_files:
+  - /etc/prometheus/alerts.yml

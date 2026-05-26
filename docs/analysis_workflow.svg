@@ -1,261 +1,155 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1050 560">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 640" role="img" aria-labelledby="title desc">
+  <title id="title">Analysis Workflow</title>
+  <desc id="desc">LangGraph analysis workflow with router, deep ReAct path, flash ReWOO path, evaluator, human approval interrupt, and publish node.</desc>
   <defs>
-    <!-- Gradients -->
-    <linearGradient id="reactGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#6366f1;stop-opacity:0.15"/>
-      <stop offset="100%" style="stop-color:#8b5cf6;stop-opacity:0.08"/>
-    </linearGradient>
-    <linearGradient id="rewooGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#10b981;stop-opacity:0.15"/>
-      <stop offset="100%" style="stop-color:#14b8a6;stop-opacity:0.08"/>
-    </linearGradient>
-    <linearGradient id="btnStart" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#3b82f6"/>
-      <stop offset="100%" style="stop-color:#2563eb"/>
-    </linearGradient>
-    <linearGradient id="btnRouter" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#8b5cf6"/>
-      <stop offset="100%" style="stop-color:#7c3aed"/>
-    </linearGradient>
-    <linearGradient id="btnPublish" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#10b981"/>
-      <stop offset="100%" style="stop-color:#059669"/>
-    </linearGradient>
-    <linearGradient id="btnEnd" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#ef4444"/>
-      <stop offset="100%" style="stop-color:#dc2626"/>
-    </linearGradient>
-    <linearGradient id="toolGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#f59e0b"/>
-      <stop offset="100%" style="stop-color:#d97706"/>
-    </linearGradient>
-    <linearGradient id="hitlGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#ec4899"/>
-      <stop offset="100%" style="stop-color:#db2777"/>
-    </linearGradient>
-    <linearGradient id="skillGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#06b6d4"/>
-      <stop offset="100%" style="stop-color:#0891b2"/>
-    </linearGradient>
-    <linearGradient id="cliGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#64748b"/>
-      <stop offset="100%" style="stop-color:#475569"/>
-    </linearGradient>
-    <linearGradient id="codeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#8b5cf6"/>
-      <stop offset="100%" style="stop-color:#7c3aed"/>
-    </linearGradient>
-    <linearGradient id="toolsContainerGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#fef3c7;stop-opacity:0.6"/>
-      <stop offset="100%" style="stop-color:#fffbeb;stop-opacity:0.3"/>
-    </linearGradient>
-
-    <!-- Drop shadow filter -->
-    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.15"/>
+    <style>
+      text { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .bg { fill: #f8fafc; }
+      .title { fill: #0f172a; font-size: 24px; font-weight: 700; }
+      .subtitle { fill: #475569; font-size: 13px; }
+      .lane-title { font-size: 14px; font-weight: 700; letter-spacing: .02em; }
+      .label { fill: #0f172a; font-size: 14px; font-weight: 700; }
+      .small { fill: #475569; font-size: 11px; }
+      .tiny { fill: #64748b; font-size: 10px; }
+      .node { fill: #ffffff; stroke-width: 2; }
+      .pill { stroke-width: 0; }
+      .edge { fill: none; stroke: #64748b; stroke-width: 2.5; }
+      .deep-edge { fill: none; stroke: #7c3aed; stroke-width: 2.5; }
+      .flash-edge { fill: none; stroke: #0f766e; stroke-width: 2.5; }
+      .tool-edge { fill: none; stroke: #d97706; stroke-width: 2.5; stroke-dasharray: 7 5; }
+      .hitl-edge { fill: none; stroke: #be185d; stroke-width: 2.5; stroke-dasharray: 7 5; }
+    </style>
+    <filter id="shadow" x="-15%" y="-20%" width="130%" height="140%">
+      <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#0f172a" flood-opacity="0.12"/>
     </filter>
-
-    <!-- Arrow markers -->
-    <marker id="arrowGray" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
-      <path d="M0,0 L0,6 L9,3 z" fill="#64748b"/>
+    <marker id="arrow" markerWidth="11" markerHeight="11" refX="9" refY="3.5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,7 L10,3.5 z" fill="#64748b"/>
     </marker>
-    <marker id="arrowPurple" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
-      <path d="M0,0 L0,6 L9,3 z" fill="#7c3aed"/>
+    <marker id="arrowDeep" markerWidth="11" markerHeight="11" refX="9" refY="3.5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,7 L10,3.5 z" fill="#7c3aed"/>
     </marker>
-    <marker id="arrowTeal" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
-      <path d="M0,0 L0,6 L9,3 z" fill="#14b8a6"/>
+    <marker id="arrowFlash" markerWidth="11" markerHeight="11" refX="9" refY="3.5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,7 L10,3.5 z" fill="#0f766e"/>
     </marker>
-    <marker id="arrowOrange" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
-      <path d="M0,0 L0,6 L9,3 z" fill="#d97706"/>
+    <marker id="arrowTool" markerWidth="11" markerHeight="11" refX="9" refY="3.5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,7 L10,3.5 z" fill="#d97706"/>
     </marker>
-    <marker id="arrowPink" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
-      <path d="M0,0 L0,6 L9,3 z" fill="#db2777"/>
-    </marker>
-    <marker id="arrowGreen" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
-      <path d="M0,0 L0,6 L9,3 z" fill="#059669"/>
+    <marker id="arrowHitl" markerWidth="11" markerHeight="11" refX="9" refY="3.5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,7 L10,3.5 z" fill="#be185d"/>
     </marker>
   </defs>
 
-  <!-- Background -->
-  <rect width="1050" height="560" fill="#fafafa"/>
+  <rect class="bg" width="1180" height="640"/>
+  <text class="title" x="590" y="38" text-anchor="middle">Analysis Workflow</text>
+  <text class="subtitle" x="590" y="61" text-anchor="middle">Router selects a reasoning loop, both paths converge on a fresh-context evaluator, then pause before publish for human approval.</text>
 
-  <!-- Title -->
-  <text x="525" y="32" font-family="Inter, system-ui, sans-serif" font-size="18" font-weight="600" fill="#1e293b" text-anchor="middle">Analysis Workflow</text>
+  <rect x="245" y="92" width="560" height="164" rx="14" fill="#f5f3ff" stroke="#a78bfa" stroke-width="2"/>
+  <text class="lane-title" x="525" y="119" fill="#5b21b6" text-anchor="middle">DEEP RESEARCH: PLAN-AND-EXECUTE + REACT</text>
 
-  <!-- ============================================ -->
-  <!-- ReAct Container (Deep Research) -->
-  <!-- ============================================ -->
-  <rect x="230" y="55" width="400" height="145" rx="12" fill="url(#reactGrad)" stroke="#8b5cf6" stroke-width="1.5" stroke-opacity="0.4"/>
-  <text x="430" y="78" font-family="Inter, system-ui, sans-serif" font-size="13" font-weight="600" fill="#6366f1" text-anchor="middle">DEEP RESEARCH (ReAct)</text>
+  <rect x="245" y="332" width="560" height="164" rx="14" fill="#ecfdf5" stroke="#5eead4" stroke-width="2"/>
+  <text class="lane-title" x="525" y="359" fill="#0f766e" text-anchor="middle">FLASH BRIEFING: REWOO</text>
 
-  <!-- ReAct nodes -->
   <g filter="url(#shadow)">
-    <rect x="255" y="95" width="90" height="40" rx="6" fill="white" stroke="#a78bfa" stroke-width="1.5"/>
-    <text x="300" y="120" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="500" fill="#5b21b6" text-anchor="middle">Planner</text>
+    <rect class="pill" x="42" y="274" width="92" height="52" rx="26" fill="#2563eb"/>
+    <text x="88" y="306" font-size="14" font-weight="800" fill="#ffffff" text-anchor="middle">START</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="170" y="270" width="104" height="60" rx="10" fill="#7c3aed"/>
+    <text x="222" y="306" font-size="14" font-weight="800" fill="#ffffff" text-anchor="middle">Router</text>
   </g>
 
   <g filter="url(#shadow)">
-    <rect x="380" y="95" width="90" height="40" rx="6" fill="white" stroke="#a78bfa" stroke-width="1.5"/>
-    <text x="425" y="120" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="500" fill="#5b21b6" text-anchor="middle">Executor</text>
+    <rect class="node" x="305" y="146" width="118" height="58" rx="9" stroke="#8b5cf6"/>
+    <text class="label" x="364" y="171" text-anchor="middle">Planner</text>
+    <text class="small" x="364" y="190" text-anchor="middle">build step plan</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect class="node" x="476" y="146" width="118" height="58" rx="9" stroke="#8b5cf6"/>
+    <text class="label" x="535" y="171" text-anchor="middle">Executor</text>
+    <text class="small" x="535" y="190" text-anchor="middle">ReAct loop</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect class="node" x="647" y="146" width="118" height="58" rx="9" stroke="#8b5cf6"/>
+    <text class="label" x="706" y="171" text-anchor="middle">Reporter</text>
+    <text class="small" x="706" y="190" text-anchor="middle">draft report</text>
   </g>
 
   <g filter="url(#shadow)">
-    <rect x="505" y="95" width="90" height="40" rx="6" fill="white" stroke="#a78bfa" stroke-width="1.5"/>
-    <text x="550" y="120" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="500" fill="#5b21b6" text-anchor="middle">Reporter</text>
+    <rect class="node" x="305" y="386" width="118" height="58" rx="9" stroke="#14b8a6"/>
+    <text class="label" x="364" y="411" text-anchor="middle">Planner</text>
+    <text class="small" x="364" y="430" text-anchor="middle">all tool calls</text>
   </g>
-
-  <!-- ReAct arrows -->
-  <path d="M345,115 L375,115" stroke="#7c3aed" stroke-width="2" marker-end="url(#arrowPurple)" fill="none"/>
-  <path d="M470,115 L500,115" stroke="#7c3aed" stroke-width="2" marker-end="url(#arrowPurple)" fill="none"/>
-
-  <!-- Loop arrow from Executor down to tools area -->
-  <path d="M425,135 L425,168" stroke="#d97706" stroke-width="2" marker-end="url(#arrowOrange)" fill="none" stroke-dasharray="5,3"/>
-  <text x="443" y="157" font-family="Inter, system-ui, sans-serif" font-size="9" fill="#92400e" font-style="italic">loop</text>
-
-  <!-- ============================================ -->
-  <!-- Tool Modalities Container (shared) -->
-  <!-- ============================================ -->
-  <rect x="230" y="210" width="400" height="120" rx="12" fill="url(#toolsContainerGrad)" stroke="#d97706" stroke-width="1.5" stroke-opacity="0.4"/>
-  <text x="430" y="232" font-family="Inter, system-ui, sans-serif" font-size="13" font-weight="600" fill="#92400e" text-anchor="middle">TOOL MODALITIES</text>
-
-  <!-- JSON Tool Calling -->
   <g filter="url(#shadow)">
-    <rect x="245" y="245" width="82" height="34" rx="5" fill="url(#toolGrad)"/>
-    <text x="286" y="258" font-family="Inter, system-ui, sans-serif" font-size="9" font-weight="600" fill="white" text-anchor="middle">JSON Tools</text>
-    <text x="286" y="270" font-family="Inter, system-ui, sans-serif" font-size="7.5" fill="rgba(255,255,255,0.85)" text-anchor="middle">stock, news, financials</text>
+    <rect class="node" x="476" y="386" width="118" height="58" rx="9" stroke="#14b8a6"/>
+    <text class="label" x="535" y="411" text-anchor="middle">Worker</text>
+    <text class="small" x="535" y="430" text-anchor="middle">parallel execute</text>
   </g>
-
-  <!-- Skills -->
   <g filter="url(#shadow)">
-    <rect x="337" y="245" width="82" height="34" rx="5" fill="url(#skillGrad)"/>
-    <text x="378" y="258" font-family="Inter, system-ui, sans-serif" font-size="9" font-weight="600" fill="white" text-anchor="middle">Skills</text>
-    <text x="378" y="270" font-family="Inter, system-ui, sans-serif" font-size="7.5" fill="rgba(255,255,255,0.85)" text-anchor="middle">SKILL.md playbooks</text>
-  </g>
-
-  <!-- CLI-as-Tool -->
-  <g filter="url(#shadow)">
-    <rect x="429" y="245" width="82" height="34" rx="5" fill="url(#cliGrad)"/>
-    <text x="470" y="258" font-family="Inter, system-ui, sans-serif" font-size="9" font-weight="600" fill="white" text-anchor="middle">CLI</text>
-    <text x="470" y="270" font-family="Inter, system-ui, sans-serif" font-size="7.5" fill="rgba(255,255,255,0.85)" text-anchor="middle">reports, memory</text>
-  </g>
-
-  <!-- Code Execution -->
-  <g filter="url(#shadow)">
-    <rect x="521" y="245" width="82" height="34" rx="5" fill="url(#codeGrad)"/>
-    <text x="562" y="258" font-family="Inter, system-ui, sans-serif" font-size="9" font-weight="600" fill="white" text-anchor="middle">Code Exec</text>
-    <text x="562" y="270" font-family="Inter, system-ui, sans-serif" font-size="7.5" fill="rgba(255,255,255,0.85)" text-anchor="middle">Python analysis</text>
-  </g>
-
-  <!-- Token cost annotations -->
-  <text x="286" y="296" font-family="Inter, system-ui, sans-serif" font-size="7.5" fill="#92400e" text-anchor="middle">~4,500 tok</text>
-  <text x="378" y="296" font-family="Inter, system-ui, sans-serif" font-size="7.5" fill="#92400e" text-anchor="middle">~100 tok</text>
-  <text x="470" y="296" font-family="Inter, system-ui, sans-serif" font-size="7.5" fill="#92400e" text-anchor="middle">~0 tok</text>
-  <text x="562" y="296" font-family="Inter, system-ui, sans-serif" font-size="7.5" fill="#92400e" text-anchor="middle">~200 tok</text>
-
-  <!-- ============================================ -->
-  <!-- ReWOO Container (Flash Briefing) -->
-  <!-- ============================================ -->
-  <rect x="230" y="345" width="400" height="145" rx="12" fill="url(#rewooGrad)" stroke="#14b8a6" stroke-width="1.5" stroke-opacity="0.4"/>
-  <text x="430" y="368" font-family="Inter, system-ui, sans-serif" font-size="13" font-weight="600" fill="#059669" text-anchor="middle">FLASH BRIEFING (ReWOO)</text>
-
-  <!-- ReWOO nodes -->
-  <g filter="url(#shadow)">
-    <rect x="255" y="385" width="90" height="40" rx="6" fill="white" stroke="#5eead4" stroke-width="1.5"/>
-    <text x="300" y="410" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="500" fill="#0d9488" text-anchor="middle">Planner</text>
+    <rect class="node" x="647" y="386" width="118" height="58" rx="9" stroke="#14b8a6"/>
+    <text class="label" x="706" y="411" text-anchor="middle">Solver</text>
+    <text class="small" x="706" y="430" text-anchor="middle">synthesize</text>
   </g>
 
   <g filter="url(#shadow)">
-    <rect x="380" y="385" width="90" height="40" rx="6" fill="white" stroke="#5eead4" stroke-width="1.5"/>
-    <text x="425" y="410" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="500" fill="#0d9488" text-anchor="middle">Worker</text>
+    <rect x="348" y="520" width="354" height="74" rx="12" fill="#fffbeb" stroke="#f59e0b" stroke-width="2"/>
+    <text class="label" x="525" y="548" fill="#92400e" text-anchor="middle">Tool Modalities</text>
+    <text class="small" x="525" y="570" text-anchor="middle">JSON tools, Skills, CLI-as-tool, Python code execution</text>
   </g>
 
   <g filter="url(#shadow)">
-    <rect x="505" y="385" width="90" height="40" rx="6" fill="white" stroke="#5eead4" stroke-width="1.5"/>
-    <text x="550" y="410" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="500" fill="#0d9488" text-anchor="middle">Solver</text>
+    <rect class="node" x="855" y="270" width="126" height="60" rx="10" stroke="#0284c7"/>
+    <text class="label" x="918" y="295" text-anchor="middle">Evaluator</text>
+    <text class="small" x="918" y="314" text-anchor="middle">default-fail gate</text>
   </g>
-
-  <!-- ReWOO arrows -->
-  <path d="M345,405 L375,405" stroke="#14b8a6" stroke-width="2" marker-end="url(#arrowTeal)" fill="none"/>
-  <path d="M470,405 L500,405" stroke="#14b8a6" stroke-width="2" marker-end="url(#arrowTeal)" fill="none"/>
-
-  <!-- Parallel arrow from Worker up to tools area -->
-  <path d="M425,385 L425,340" stroke="#d97706" stroke-width="2" marker-end="url(#arrowOrange)" fill="none" stroke-dasharray="5,3"/>
-  <text x="443" y="368" font-family="Inter, system-ui, sans-serif" font-size="9" fill="#92400e" font-style="italic">parallel</text>
-
-  <!-- ============================================ -->
-  <!-- START, Router, HITL, Publish, END -->
-  <!-- ============================================ -->
-
-  <!-- START node -->
   <g filter="url(#shadow)">
-    <rect x="25" y="255" width="75" height="40" rx="20" fill="url(#btnStart)"/>
-    <text x="62" y="280" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="600" fill="white" text-anchor="middle">START</text>
+    <rect x="1022" y="270" width="118" height="60" rx="10" fill="#be185d"/>
+    <text x="1081" y="294" font-size="14" font-weight="800" fill="#ffffff" text-anchor="middle">Publish</text>
+    <text x="1081" y="313" font-size="11" fill="#fce7f3" text-anchor="middle">HITL interrupt</text>
   </g>
 
-  <!-- Router node -->
-  <g filter="url(#shadow)">
-    <rect x="130" y="255" width="75" height="40" rx="8" fill="url(#btnRouter)"/>
-    <text x="167" y="280" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="600" fill="white" text-anchor="middle">Router</text>
-  </g>
+  <line x1="134" y1="300" x2="165" y2="300" stroke="#64748b" stroke-width="2.5"/>
+  <polygon points="165,300 155,295 155,305" fill="#64748b"/>
+  <line x1="274" y1="286" x2="300" y2="175" stroke="#7c3aed" stroke-width="2.5"/>
+  <polygon points="300,175 288,170 291,182" fill="#7c3aed"/>
+  <text class="tiny" x="296" y="143" fill="#6d28d9">deep mode</text>
+  <line x1="274" y1="314" x2="300" y2="415" stroke="#0f766e" stroke-width="2.5"/>
+  <polygon points="300,415 289,408 288,421" fill="#0f766e"/>
+  <text class="tiny" x="296" y="468" fill="#0f766e">flash mode</text>
 
-  <!-- START to Router arrow -->
-  <path d="M100,275 L125,275" stroke="#64748b" stroke-width="2" marker-end="url(#arrowGray)" fill="none"/>
+  <line x1="423" y1="175" x2="471" y2="175" stroke="#7c3aed" stroke-width="2.5"/>
+  <polygon points="471,175 461,170 461,180" fill="#7c3aed"/>
+  <line x1="594" y1="175" x2="642" y2="175" stroke="#7c3aed" stroke-width="2.5"/>
+  <polygon points="642,175 632,170 632,180" fill="#7c3aed"/>
+  <line x1="535" y1="204" x2="535" y2="247" stroke="#7c3aed" stroke-width="2.5"/>
+  <line x1="560" y1="247" x2="560" y2="204" stroke="#7c3aed" stroke-width="2.5"/>
+  <polygon points="560,204 555,214 565,214" fill="#7c3aed"/>
+  <text class="tiny" x="551" y="236" fill="#6d28d9">loop until plan complete</text>
 
-  <!-- Router to Deep Research arrow -->
-  <path d="M205,265 L217,265 L217,115 L250,115" stroke="#7c3aed" stroke-width="2" marker-end="url(#arrowPurple)" fill="none"/>
+  <line x1="423" y1="415" x2="471" y2="415" stroke="#0f766e" stroke-width="2.5"/>
+  <polygon points="471,415 461,410 461,420" fill="#0f766e"/>
+  <line x1="594" y1="415" x2="642" y2="415" stroke="#0f766e" stroke-width="2.5"/>
+  <polygon points="642,415 632,410 632,420" fill="#0f766e"/>
 
-  <!-- Router to Flash Briefing arrow -->
-  <path d="M205,285 L217,285 L217,405 L250,405" stroke="#14b8a6" stroke-width="2" marker-end="url(#arrowTeal)" fill="none"/>
+  <line x1="500" y1="444" x2="500" y2="515" stroke="#d97706" stroke-width="2.5" stroke-dasharray="7 5"/>
+  <polygon points="500,515 495,505 505,505" fill="#d97706"/>
+  <text class="tiny" x="553" y="482" fill="#92400e">parallel tool batch</text>
 
-  <!-- HITL Approval node -->
-  <g filter="url(#shadow)">
-    <rect x="720" y="255" width="80" height="40" rx="6" fill="url(#hitlGrad)"/>
-    <text x="760" y="272" font-family="Inter, system-ui, sans-serif" font-size="10" font-weight="500" fill="white" text-anchor="middle">HITL</text>
-    <text x="760" y="284" font-family="Inter, system-ui, sans-serif" font-size="10" font-weight="500" fill="white" text-anchor="middle">Approval</text>
-  </g>
+  <line x1="765" y1="175" x2="850" y2="291" stroke="#64748b" stroke-width="2.5"/>
+  <polygon points="850,291 839,285 837,297" fill="#64748b"/>
+  <line x1="765" y1="415" x2="850" y2="309" stroke="#64748b" stroke-width="2.5"/>
+  <polygon points="850,309 837,313 840,301" fill="#64748b"/>
+  <line x1="981" y1="300" x2="1017" y2="300" stroke="#be185d" stroke-width="2.5" stroke-dasharray="7 5"/>
+  <polygon points="1017,300 1007,295 1007,305" fill="#be185d"/>
+  <text class="tiny" x="1001" y="288" fill="#be185d" text-anchor="middle">interrupt_before</text>
 
-  <!-- Reporter to HITL arrow -->
-  <path d="M595,115 L660,115 L660,265 L715,265" stroke="#64748b" stroke-width="2" marker-end="url(#arrowGray)" fill="none"/>
-
-  <!-- Solver to HITL arrow -->
-  <path d="M595,405 L660,405 L660,285 L715,285" stroke="#64748b" stroke-width="2" marker-end="url(#arrowGray)" fill="none"/>
-
-  <!-- Publish node -->
-  <g filter="url(#shadow)">
-    <rect x="840" y="255" width="80" height="40" rx="8" fill="url(#btnPublish)"/>
-    <text x="880" y="280" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="600" fill="white" text-anchor="middle">Publish</text>
-  </g>
-
-  <!-- HITL to Publish arrow -->
-  <path d="M800,275 L835,275" stroke="#db2777" stroke-width="2" marker-end="url(#arrowPink)" fill="none"/>
-
-  <!-- END node -->
-  <g filter="url(#shadow)">
-    <rect x="960" y="255" width="55" height="40" rx="20" fill="url(#btnEnd)"/>
-    <text x="987" y="280" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="600" fill="white" text-anchor="middle">END</text>
-  </g>
-
-  <!-- Publish to END arrow -->
-  <path d="M920,275 L955,275" stroke="#059669" stroke-width="2" marker-end="url(#arrowGreen)" fill="none"/>
-
-  <!-- ============================================ -->
-  <!-- Legend -->
-  <!-- ============================================ -->
-  <g transform="translate(25, 530)">
-    <text x="0" y="0" font-family="Inter, system-ui, sans-serif" font-size="10" font-weight="600" fill="#64748b">Legend:</text>
-    <rect x="55" y="-10" width="14" height="14" rx="3" fill="url(#reactGrad)" stroke="#8b5cf6" stroke-width="1"/>
-    <text x="75" y="2" font-family="Inter, system-ui, sans-serif" font-size="9" fill="#64748b">ReAct</text>
-    <rect x="115" y="-10" width="14" height="14" rx="3" fill="url(#rewooGrad)" stroke="#14b8a6" stroke-width="1"/>
-    <text x="135" y="2" font-family="Inter, system-ui, sans-serif" font-size="9" fill="#64748b">ReWOO</text>
-    <rect x="180" y="-10" width="14" height="14" rx="3" fill="url(#toolGrad)"/>
-    <text x="200" y="2" font-family="Inter, system-ui, sans-serif" font-size="9" fill="#64748b">JSON Tools</text>
-    <rect x="260" y="-10" width="14" height="14" rx="3" fill="url(#skillGrad)"/>
-    <text x="280" y="2" font-family="Inter, system-ui, sans-serif" font-size="9" fill="#64748b">Skills</text>
-    <rect x="315" y="-10" width="14" height="14" rx="3" fill="url(#cliGrad)"/>
-    <text x="335" y="2" font-family="Inter, system-ui, sans-serif" font-size="9" fill="#64748b">CLI</text>
-    <rect x="360" y="-10" width="14" height="14" rx="3" fill="url(#codeGrad)"/>
-    <text x="380" y="2" font-family="Inter, system-ui, sans-serif" font-size="9" fill="#64748b">Code Exec</text>
-    <rect x="440" y="-10" width="14" height="14" rx="3" fill="url(#hitlGrad)"/>
-    <text x="460" y="2" font-family="Inter, system-ui, sans-serif" font-size="9" fill="#64748b">HITL</text>
+  <g transform="translate(42 608)">
+    <rect x="0" y="-12" width="14" height="14" rx="3" fill="#f5f3ff" stroke="#8b5cf6"/>
+    <text class="tiny" x="22" y="0">ReAct path</text>
+    <rect x="105" y="-12" width="14" height="14" rx="3" fill="#ecfdf5" stroke="#14b8a6"/>
+    <text class="tiny" x="127" y="0">ReWOO path</text>
+    <rect x="214" y="-12" width="14" height="14" rx="3" fill="#fffbeb" stroke="#f59e0b"/>
+    <text class="tiny" x="236" y="0">Shared tool surface</text>
+    <rect x="365" y="-12" width="14" height="14" rx="3" fill="#be185d"/>
+    <text class="tiny" x="387" y="0">Human approval before publish</text>
   </g>
 </svg>

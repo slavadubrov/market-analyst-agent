@@ -13,9 +13,11 @@ import os
 
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel, Field
 
 from market_analyst.constants import DEFAULT_MODEL, MODEL_ENV_VAR
+from market_analyst.nodes._telemetry import node_callbacks
 from market_analyst.schemas import AgentState, ReWOOPlanStep
 
 REWOO_PLANNER_PROMPT = """You are a research analyst creating an efficient data gathering plan.
@@ -46,7 +48,7 @@ class ReWOOPlanOutput(BaseModel):
     steps: list[ReWOOPlanStep] = Field(description="Planned tool calls with variables")
 
 
-def rewoo_planner_node(state: AgentState) -> dict:
+def rewoo_planner_node(state: AgentState, config: RunnableConfig | None = None) -> dict:
     """Generate a complete plan of tool calls upfront.
 
     Unlike the regular planner, this creates the full execution plan
@@ -54,6 +56,7 @@ def rewoo_planner_node(state: AgentState) -> dict:
 
     Args:
         state: Current agent state with research_data.ticker
+        config: LangGraph runtime config; used to pull ``thread_id`` for tracing.
 
     Returns:
         Updated state with rewoo_plan
@@ -91,7 +94,10 @@ Output a list of tool calls with:
     ]
 
     try:
-        result: ReWOOPlanOutput = structured_llm.invoke(messages)
+        result: ReWOOPlanOutput = structured_llm.invoke(
+            messages,
+            config={"callbacks": node_callbacks(node_name="rewoo_planner", config=config)},
+        )
 
         print(f"\n⚡ ReWOO Plan created with {len(result.steps)} parallel tool calls:")
         for step in result.steps:

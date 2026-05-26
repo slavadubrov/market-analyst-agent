@@ -18,6 +18,16 @@ dependencies = [
     "gradio>=6.4.0",
     "tenacity>=8.0.0",
     "langchain-experimental>=0.3.0",
+    # Observability (Part 5: The Habitat)
+    "opentelemetry-api>=1.27.0",
+    "opentelemetry-sdk>=1.27.0",
+    "opentelemetry-exporter-otlp-proto-grpc>=1.27.0",
+    "opentelemetry-instrumentation-logging>=0.48b0",
+    "prometheus-client>=0.21.0",
+    # Queue + worker shape (Part 5: queue + worker + checkpoint DB)
+    "redis>=5.0.0",
+    # MCP sidecar (Part 5: tools behind a proxy / secret broker pattern)
+    "mcp>=1.0.0",
 ]
 
 [project.scripts]

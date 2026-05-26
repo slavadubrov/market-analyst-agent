@@ -1,0 +1,42 @@
+# Grafana Loki — single-binary mode with filesystem storage. Production
+# deployments use a distributed Loki on S3/GCS; for the reference repo this
+# keeps `docker compose --profile observability up` to one process per service.
+
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+  grpc_listen_port: 9096
+
+common:
+  ring:
+    instance_addr: 127.0.0.1
+    kvstore:
+      store: inmemory
+  replication_factor: 1
+  path_prefix: /loki
+
+schema_config:
+  configs:
+    - from: 2024-01-01
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+storage_config:
+  tsdb_shipper:
+    active_index_directory: /loki/index
+    cache_location: /loki/index_cache
+  filesystem:
+    directory: /loki/chunks
+
+ruler:
+  alertmanager_url: http://localhost:9093
+
+# Retain logs for 14 days in dev; bump in production via -config.expand-env=true
+# and a CONFIG override.
+limits_config:
+  retention_period: 336h

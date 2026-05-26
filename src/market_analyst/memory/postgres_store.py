@@ -1,10 +1,15 @@
 """PostgreSQL connection and checkpointer management."""
 
 import atexit
+import logging
 import os
 
 from langgraph.checkpoint.postgres import PostgresSaver
 from psycopg_pool import ConnectionPool
+
+from market_analyst.memory.encryption import get_encrypted_serializer
+
+logger = logging.getLogger(__name__)
 
 
 def get_connection_string() -> str:
@@ -54,10 +59,19 @@ def get_connection_pool() -> ConnectionPool:
 def get_postgres_saver() -> PostgresSaver:
     """Create and configure a Postgres checkpointer.
 
+    If ``CHECKPOINT_ENCRYPTION_KEY`` is set, the checkpointer wraps payloads
+    with ``EncryptedSerializer`` per the article's production-hardening list.
+    Otherwise the default serializer is used.
+
     Returns:
         Configured PostgresSaver instance
     """
     pool = get_connection_pool()
-    checkpointer = PostgresSaver(pool)
+    serde = get_encrypted_serializer()
+    if serde is not None:
+        checkpointer = PostgresSaver(pool, serde=serde)
+        logger.info("PostgresSaver: checkpoint encryption enabled")
+    else:
+        checkpointer = PostgresSaver(pool)
     checkpointer.setup()
     return checkpointer
