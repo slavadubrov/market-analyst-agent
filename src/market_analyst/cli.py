@@ -22,6 +22,7 @@ from market_analyst.memory import (
     get_long_term_memory,
 )
 from market_analyst.nodes.reporter import format_report_for_display
+from market_analyst.runtime import harness_run
 from market_analyst.schemas import ExecutionMode
 from market_analyst.utils import get_state_attr
 from market_analyst.workflows.analysis_workflow import (
@@ -539,20 +540,25 @@ def run_new_analysis(args):
     force_mode = _parse_force_mode(args.mode)
 
     try:
-        result = run_analysis(
-            query=args.query,
-            user_id=args.user_id,
-            thread_id=thread_id,
-            checkpointer=checkpointer,
-            force_mode=force_mode,
-        )
-        _print_analysis_result(result, args, thread_id)
+        with harness_run(thread_id, workflow_name="analysis") as harness:
+            if harness.initializer.is_resume():
+                print(f"   📂 Resuming from prior workspace at {harness.workspace}")
+            result = run_analysis(
+                query=args.query,
+                user_id=args.user_id,
+                thread_id=thread_id,
+                checkpointer=checkpointer,
+                force_mode=force_mode,
+            )
+            harness.final_state = result.get("state")
+            _print_analysis_result(result, args, thread_id)
 
     except KeyboardInterrupt:
         print("\n\n⏸️  Analysis interrupted. Resume with:")
         print(f"   uv run market-analyst --resume --thread-id {thread_id}")
     except Exception as e:
         print(f"\n❌ Error: {e}")
+        print(f"   📦 Debug bundle: workspaces/{thread_id}/_debug/")
         if args.verbose:
             traceback.print_exc()
         sys.exit(1)
@@ -776,21 +782,26 @@ def run_combined_command(args):
     force_mode = _parse_force_mode(args.mode)
 
     try:
-        result = run_combined_analysis(
-            query=args.query,
-            user_id=args.user_id,
-            thread_id=thread_id,
-            checkpointer=checkpointer,
-            force_mode=force_mode,
-            trade_amount=args.trade_amount,
-        )
-        _print_combined_result(result, thread_id, args)
+        with harness_run(thread_id, workflow_name="combined") as harness:
+            if harness.initializer.is_resume():
+                print(f"   📂 Resuming from prior workspace at {harness.workspace}")
+            result = run_combined_analysis(
+                query=args.query,
+                user_id=args.user_id,
+                thread_id=thread_id,
+                checkpointer=checkpointer,
+                force_mode=force_mode,
+                trade_amount=args.trade_amount,
+            )
+            harness.final_state = result.get("state")
+            _print_combined_result(result, thread_id, args)
 
     except KeyboardInterrupt:
         print("\n\n⏸️  Workflow interrupted. Resume with:")
         print(f"   uv run market-analyst --resume --thread-id {thread_id}")
     except Exception as e:
         print(f"\n❌ Error: {e}")
+        print(f"   📦 Debug bundle: workspaces/{thread_id}/_debug/")
         if args.verbose:
             traceback.print_exc()
         sys.exit(1)

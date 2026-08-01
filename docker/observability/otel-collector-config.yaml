@@ -1,0 +1,47 @@
+# OpenTelemetry Collector — receives OTLP, forwards traces to Tempo and
+# metrics to Prometheus. Logs are scraped from worker stdout by Loki via the
+# Docker driver (see docker-compose.yml), so the Collector only handles
+# traces and metrics here.
+#
+# Why a Collector instead of pointing the SDK directly at Tempo: the article's
+# "OpenTelemetry Collector with the GenAI processor and an attribute filter on
+# gen_ai.*" line. The Collector is also where you'd apply sampling, redact PII,
+# or fan-out to a SaaS backend later.
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+    timeout: 1s
+    send_batch_size: 1024
+  # Keep only spans that carry gen_ai.* attributes. The reference repo's
+  # spans all do, so this is a no-op for the demo, but it documents the
+  # filter the article calls out.
+  filter/genai:
+    spans:
+      include:
+        match_type: strict
+        attributes:
+          - key: gen_ai.operation.name
+            value: ".+"
+
+exporters:
+  otlp/tempo:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+  debug:
+    verbosity: basic
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [filter/genai, batch]
+      exporters: [otlp/tempo, debug]

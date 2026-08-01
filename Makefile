@@ -82,3 +82,31 @@ docker-up:
 # Stop all services (removes containers)
 docker-down:
 	docker compose -f docker/docker-compose.yml --env-file .env down
+
+# --- Part 5: The Habitat -----------------------------------------------------
+
+# Bring up the OTel Collector + Tempo + Loki + Prometheus + Grafana stack.
+# Grafana lands on http://localhost:3000 with the "Market Analyst — Overview"
+# dashboard preloaded.
+observability-up:
+	docker compose -f docker/docker-compose.yml --env-file .env --profile observability up -d
+
+observability-down:
+	docker compose -f docker/docker-compose.yml --env-file .env --profile observability stop
+
+# Bring up the MCP sidecar (secret-broker pattern: tools behind a proxy).
+mcp-up:
+	docker compose -f docker/docker-compose.yml --env-file .env --profile mcp up -d mcp-sidecar
+
+mcp-down:
+	docker compose -f docker/docker-compose.yml --env-file .env --profile mcp stop mcp-sidecar
+
+# Run the queue worker locally (queue+worker+checkpoint DB shape).
+# Producer side: any `market-analyst …` invocation that hits the CLI.
+# Consumer side: this loop.
+worker: install db-up
+	OTEL_SERVICE_NAME=market-analyst-worker uv run python -m market_analyst.runtime.worker
+
+# Push a single test job onto the queue.
+queue-push: install
+	uv run python -c "from market_analyst.runtime.queue import push_run; print(push_run('Analyze NVDA stock', mode='flash'))"

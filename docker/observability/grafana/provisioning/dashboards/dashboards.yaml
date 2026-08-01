@@ -1,0 +1,12 @@
+# Tell Grafana to load all JSON dashboards in /etc/grafana/dashboards on boot.
+apiVersion: 1
+
+providers:
+  - name: market-analyst
+    folder: Market Analyst
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/dashboards

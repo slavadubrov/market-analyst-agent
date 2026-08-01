@@ -8,9 +8,11 @@ generated first, and then executed by a ReAct agent.
 from typing import cast
 
 from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel, Field
 
 from market_analyst.llm import get_structured_model
+from market_analyst.nodes._telemetry import node_callbacks
 from market_analyst.schemas import AgentState, PlanStep, ResearchData
 
 PLANNER_SYSTEM_PROMPT = """You are a senior investment research analyst at an institutional fund.
@@ -39,7 +41,7 @@ class PlanOutput(BaseModel):
     ticker: str = Field(description="The stock ticker being analyzed")
 
 
-def planner_node(state: AgentState) -> dict:
+def planner_node(state: AgentState, config: RunnableConfig | None = None) -> dict:
     """Generate a research plan from the user's request.
 
     This node:
@@ -49,6 +51,7 @@ def planner_node(state: AgentState) -> dict:
 
     Args:
         state: Current agent state with messages
+        config: LangGraph runtime config; used to pull ``thread_id`` for tracing.
 
     Returns:
         Updated state with plan and research_data initialized
@@ -82,7 +85,13 @@ Consider this profile when planning the analysis."""
     ]
 
     try:
-        result = cast(PlanOutput, structured_llm.invoke(messages))
+        result = cast(
+            PlanOutput,
+            structured_llm.invoke(
+                messages,
+                config={"callbacks": node_callbacks(node_name="planner", config=config)},
+            ),
+        )
 
         print(f"\n📋 Research plan created with {len(result.steps)} steps:")
         for step in result.steps:

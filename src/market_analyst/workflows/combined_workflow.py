@@ -42,6 +42,7 @@ from market_analyst.nodes.rewoo_solver import rewoo_solver_node
 from market_analyst.nodes.rewoo_worker import rewoo_worker_node
 from market_analyst.nodes.router import router_node
 from market_analyst.nodes.trade_executor import trade_executor_node
+from market_analyst.runtime.evaluator import evaluator_node
 from market_analyst.schemas import (
     AgentState,
     ExecutionMode,
@@ -77,7 +78,7 @@ def create_trade_from_report_node(state: AgentState) -> dict:
     3. Setting up state for the Guardian to evaluate
     """
     report = state.draft_report
-    trade_amount = state.trade_amount
+    trade_amount = state.trade_amount if state.trade_amount is not None else DEFAULT_TRADE_AMOUNT
 
     if not report:
         print("  ⚠️  No report available to create trade from")
@@ -246,6 +247,7 @@ def create_combined_graph(
     builder.add_node("rewoo_planner", rewoo_planner_node)
     builder.add_node("rewoo_worker", rewoo_worker_node)
     builder.add_node("rewoo_solver", rewoo_solver_node)
+    builder.add_node("evaluator", evaluator_node)
     builder.add_node("publish", publish_node)
 
     # === Trade nodes ===
@@ -276,12 +278,15 @@ def create_combined_graph(
             "reporter": "reporter",
         },
     )
-    builder.add_edge("reporter", "publish")
+    builder.add_edge("reporter", "evaluator")
 
     # Flash Briefing path
     builder.add_edge("rewoo_planner", "rewoo_worker")
     builder.add_edge("rewoo_worker", "rewoo_solver")
-    builder.add_edge("rewoo_solver", "publish")
+    builder.add_edge("rewoo_solver", "evaluator")
+
+    # Both paths converge on the evaluator, which feeds the publish HITL.
+    builder.add_edge("evaluator", "publish")
 
     # === Bridge: Analysis → Trade ===
     builder.add_edge("publish", "create_trade")
@@ -358,7 +363,7 @@ def run_combined_analysis(
     )
 
     # Create graph
-    graph = create_combined_graph(checkpointer=checkpointer, force_mode=force_mode)
+    graph = create_combined_graph(checkpointer=checkpointer)
 
     # Configure thread
     thread_id = thread_id or str(uuid.uuid4())

@@ -8,9 +8,11 @@ Classifies user requests to route between:
 from typing import cast
 
 from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel, Field
 
 from market_analyst.llm import get_structured_model
+from market_analyst.nodes._telemetry import node_callbacks
 from market_analyst.schemas import AgentState, ExecutionMode, ResearchData
 
 ROUTER_SYSTEM_PROMPT = """You are an intent classifier for a stock analysis agent.
@@ -39,11 +41,12 @@ class RouterOutput(BaseModel):
     reasoning: str = Field(description="Brief reasoning for the classification")
 
 
-def router_node(state: AgentState) -> dict:
+def router_node(state: AgentState, config: RunnableConfig | None = None) -> dict:
     """Classify the user's intent and route to appropriate execution path.
 
     Args:
         state: Current agent state with messages
+        config: LangGraph runtime config; used to pull ``thread_id`` for tracing.
 
     Returns:
         Updated state with execution_mode and research_data initialized
@@ -87,7 +90,13 @@ def router_node(state: AgentState) -> dict:
     ]
 
     try:
-        result = cast(RouterOutput, structured_llm.invoke(messages))
+        result = cast(
+            RouterOutput,
+            structured_llm.invoke(
+                messages,
+                config={"callbacks": node_callbacks(node_name="router", config=config)},
+            ),
+        )
 
         mode_emoji = "⚡" if result.mode == ExecutionMode.FLASH_BRIEFING else "🔬"
         mode_name = "Flash Briefing (ReWOO)" if result.mode == ExecutionMode.FLASH_BRIEFING else "Deep Research (ReAct)"

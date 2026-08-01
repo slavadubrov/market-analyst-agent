@@ -31,6 +31,7 @@ from market_analyst.nodes.rewoo_planner import rewoo_planner_node
 from market_analyst.nodes.rewoo_solver import rewoo_solver_node
 from market_analyst.nodes.rewoo_worker import rewoo_worker_node
 from market_analyst.nodes.router import router_node
+from market_analyst.runtime.evaluator import evaluator_node
 from market_analyst.schemas import AgentState, DraftReport, ExecutionMode
 
 
@@ -73,10 +74,14 @@ def create_graph(
 
     Args:
         checkpointer: Optional PostgresSaver for state persistence.
-        force_mode: Optional mode override (bypasses router classification).
 
     Returns:
-        Compiled StateGraph ready for invocation
+        Compiled StateGraph ready for invocation.
+
+    Note:
+        To force a specific reasoning mode (bypassing the router), set
+        ``execution_mode`` on the initial ``AgentState`` instead — the router
+        node short-circuits when the mode is already set.
     """
     # Build the graph
     builder = StateGraph(AgentState)
@@ -95,6 +100,11 @@ def create_graph(
     builder.add_node("rewoo_worker", rewoo_worker_node)
     builder.add_node("rewoo_solver", rewoo_solver_node)
 
+    # Fresh-context evaluator subagent (Part 5: generator/evaluator split).
+    # Sits between report and publish; on default-FAIL the human reviewer
+    # still has the chance to approve via the existing interrupt.
+    builder.add_node("evaluator", evaluator_node)
+
     # Publish (shared by both paths)
     builder.add_node("publish", publish_node)
 
@@ -112,7 +122,7 @@ def create_graph(
         },
     )
 
-    # Deep Research path: planner → executor (loop) → reporter → publish
+    # Deep Research path: planner → executor (loop) → reporter → evaluator → publish
     builder.add_edge("planner", "executor")
     builder.add_conditional_edges(
         "executor",
@@ -122,12 +132,15 @@ def create_graph(
             "reporter": "reporter",
         },
     )
-    builder.add_edge("reporter", "publish")
+    builder.add_edge("reporter", "evaluator")
 
-    # Flash Briefing path: rewoo_planner → rewoo_worker → rewoo_solver → publish
+    # Flash Briefing path: rewoo_planner → rewoo_worker → rewoo_solver → evaluator → publish
     builder.add_edge("rewoo_planner", "rewoo_worker")
     builder.add_edge("rewoo_worker", "rewoo_solver")
-    builder.add_edge("rewoo_solver", "publish")
+    builder.add_edge("rewoo_solver", "evaluator")
+
+    # Both paths converge on the evaluator, which gates the human-approval interrupt.
+    builder.add_edge("evaluator", "publish")
 
     # End
     builder.add_edge("publish", END)
@@ -254,8 +267,8 @@ def run_analysis(
         execution_mode=force_mode,  # Will be overwritten by router if None
     )
 
-    # Create graph
-    graph = create_graph(checkpointer=checkpointer, force_mode=force_mode)
+    # Create graph (execution_mode is already on initial_state)
+    graph = create_graph(checkpointer=checkpointer)
 
     # Configure thread
     thread_id = thread_id or str(uuid.uuid4())

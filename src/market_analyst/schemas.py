@@ -174,4 +174,17 @@ class AgentState(BaseModel):
     # Workflow control
     error: str | None = None
 
+    # Budget enforcement (set by the harness before invoke)
+    # See market_analyst.observability.budget. Tracks running totals of
+    # tokens/tool-calls so a kill-switch in the harness can stop the run.
+    token_budget: int | None = None
+    tool_call_budget: int | None = None
+    tokens_used: int = 0
+    tool_calls_used: int = 0
+
+    # Evaluator subagent verdict (set by the evaluator node after the report
+    # is drafted; defaults to None so unevaluated runs are treated as pending).
+    evaluator_verdict: Literal["pass", "fail", "needs_human"] | None = None
+    evaluator_reasons: list[str] = Field(default_factory=list)
+
     model_config = ConfigDict(arbitrary_types_allowed=True)
