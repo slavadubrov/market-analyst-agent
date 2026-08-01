@@ -33,6 +33,7 @@ def test_stock_query_valid_ticker():
     """Test StockQuery validates and uppercases ticker."""
     q = StockQuery(ticker="nvda")
     assert q.ticker == "NVDA"
+    assert StockQuery(ticker="brk.b").ticker == "BRK.B"
 
 
 def test_stock_query_invalid_ticker():
@@ -227,6 +228,7 @@ def test_parse_trade_request_valid():
 def test_parse_trade_request_invalid():
     """Test parsing invalid string returns None."""
     assert parse_trade_request("Not a trade request") is None
+    assert parse_trade_request("TRADE_REQUEST:not-json") is None
 
 
 # --- Test Skills (Modality 2) ---
@@ -336,6 +338,19 @@ def test_code_exec_blocks_eval():
 
     result = execute_python_analysis.invoke({"code": "eval('2+2')"})
     assert "Blocked" in result
+
+
+def test_code_exec_blocks_introspection_bypasses():
+    """Dunder and indirect calls cannot bypass the safety boundary."""
+    from market_analyst.tools.code_exec import execute_python_analysis
+
+    payloads = [
+        "print(__builtins__)",
+        "getattr(print, '__self__')",
+        "().__class__.__base__.__subclasses__()",
+        "from os import system",
+    ]
+    assert all("Blocked" in execute_python_analysis.invoke({"code": code}) for code in payloads)
 
 
 # --- Test CLI-as-Tool (Modality 3) ---

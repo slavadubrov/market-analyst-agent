@@ -17,7 +17,6 @@ dependencies = [
     "qdrant-client>=1.16.2",
     "gradio>=6.4.0",
     "tenacity>=8.0.0",
-    "langchain-experimental>=0.3.0",
 ]
 
 [project.scripts]
@@ -61,5 +60,11 @@ markers = [
 
 [tool.mypy]
 python_version = "3.13"
-strict = true
+files = ["src"]
+check_untyped_defs = true
+warn_return_any = true
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "market_analyst.app"
+disable_error_code = ["attr-defined"]

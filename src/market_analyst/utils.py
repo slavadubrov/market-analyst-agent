@@ -1,11 +1,20 @@
 """Utility functions for state access."""
 
-from typing import Any, TypeVar
+import re
+from typing import Any
 
-T = TypeVar("T")
+_TICKER_RE = re.compile(r"[A-Z][A-Z0-9]{0,4}(?:[.-][A-Z0-9]{1,4})?")
 
 
-def get_state_attr(state: Any, attr: str, default: T = None) -> T:
+def normalize_ticker(value: str) -> str:
+    """Normalize a common exchange ticker and reject unsafe query text."""
+    ticker = value.strip().upper()
+    if not _TICKER_RE.fullmatch(ticker):
+        raise ValueError(f"Invalid ticker format: {ticker}")
+    return ticker
+
+
+def get_state_attr(state: Any, attr: str, default: Any = None) -> Any:
     """Safely extract attribute from state object or dict.
 
     Args:

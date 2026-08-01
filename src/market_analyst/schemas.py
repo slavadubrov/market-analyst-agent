@@ -4,7 +4,9 @@ from enum import Enum
 from typing import Annotated, Literal
 
 from langgraph.graph.message import add_messages
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from market_analyst.utils import normalize_ticker
 
 
 class ExecutionMode(str, Enum):
@@ -21,6 +23,8 @@ class UserProfile(BaseModel):
     investment_horizon: Literal["short", "medium", "long"] = Field(default="medium", description="Investment time horizon")
     preferred_sectors: list[str] = Field(default_factory=list, description="Preferred industry sectors")
     notes: str = Field(default="", description="Additional user notes/preferences")
+
+    model_config = ConfigDict(validate_assignment=True)
 
 
 class ReWOOPlanStep(BaseModel):
@@ -96,9 +100,16 @@ class TradeRequest(BaseModel):
     """
 
     action: TradeAction = Field(description="The type of trade action")
-    ticker: str = Field(description="Stock ticker symbol")
-    amount_usd: float = Field(ge=0, description="Trade amount in USD")
-    reason: str = Field(description="Agent's reasoning for the trade")
+    ticker: str = Field(min_length=1, max_length=10, description="Stock ticker symbol")
+    amount_usd: float = Field(ge=0, allow_inf_nan=False, description="Trade amount in USD")
+    reason: str = Field(min_length=1, description="Agent's reasoning for the trade")
+
+    @field_validator("ticker")
+    @classmethod
+    def normalize_ticker(cls, value: str) -> str:
+        return normalize_ticker(value)
+
+    model_config = ConfigDict(validate_assignment=True)
 
 
 class GuardianDecision(str, Enum):
@@ -158,6 +169,7 @@ class AgentState(BaseModel):
     guardian_result: GuardianResult | None = None
     trade_approved: bool = False
     trade_executed: bool = False
+    trade_amount: float = Field(default=1000.0, ge=0, allow_inf_nan=False)
 
     # Workflow control
     error: str | None = None

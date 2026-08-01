@@ -129,7 +129,7 @@ def executor_node(state: AgentState) -> dict:
     previous_context = _build_previous_context(state.plan, state.current_step_index)
 
     model_name = os.getenv(MODEL_ENV_VAR, DEFAULT_MODEL)
-    llm = ChatAnthropic(model=model_name, temperature=0)
+    llm = ChatAnthropic(model_name=model_name, temperature=0, timeout=None, stop=None)
     react_agent = create_react_agent(model=llm, tools=TOOLS)
 
     ticker = state.research_data.ticker if state.research_data else "UNKNOWN"

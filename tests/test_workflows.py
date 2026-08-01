@@ -1,10 +1,13 @@
 from pathlib import Path
 
+from market_analyst.app import _handle_combined_result
+from market_analyst.nodes.rewoo_worker import rewoo_worker_node
 from market_analyst.schemas import (
     AgentState,
     DraftReport,
     GuardianDecision,
     GuardianResult,
+    ReWOOPlanStep,
     TradeAction,
 )
 from market_analyst.workflows.analysis_workflow import (
@@ -157,8 +160,7 @@ def test_create_trade_from_report_node(mocker):
         risk_factors=[],
     )
 
-    # Hack to mock the _trade_amount attribute that is dynamically added
-    state._trade_amount = 2000.0
+    state.trade_amount = 2000.0
 
     result = create_trade_from_report_node(state)
 
@@ -176,3 +178,45 @@ def test_create_combined_graph_smoke(mocker):
     mock_graph.compile.return_value = "compiled_graph"
     create_combined_graph()
     mock_graph.compile.assert_called()
+
+
+def test_rewoo_worker_respects_dependency_chains(mocker):
+    """A dependent step never runs before its transitive dependency."""
+    calls = []
+
+    def fake_execute(step, results):
+        calls.append((step.step_id, set(results)))
+        return step.step_id
+
+    mocker.patch("market_analyst.nodes.rewoo_worker.execute_tool", side_effect=fake_execute)
+    state = AgentState(
+        rewoo_plan=[
+            ReWOOPlanStep(step_id="#E1", description="one", tool_name="x"),
+            ReWOOPlanStep(step_id="#E2", description="two", tool_name="x", depends_on=["#E1"]),
+            ReWOOPlanStep(step_id="#E3", description="three", tool_name="x", depends_on=["#E2"]),
+        ]
+    )
+
+    result = rewoo_worker_node(state)
+
+    assert calls == [("#E1", set()), ("#E2", {"#E1"}), ("#E3", {"#E1", "#E2"})]
+    assert [step.result for step in result["rewoo_plan"]] == ["#E1", "#E2", "#E3"]
+
+
+def test_combined_ui_returns_trade_info_as_its_own_output():
+    """Trade details target the textbox, not the approval group."""
+    outputs = _handle_combined_result(
+        {
+            "requires_trade_approval": True,
+            "guardian_result": GuardianResult(
+                decision=GuardianDecision.ESCALATE,
+                policy_name="default_review",
+                reason="Needs approval",
+            ),
+        },
+        "started",
+        "thread-1",
+    )
+
+    assert len(outputs) == 6
+    assert outputs[4] == "Policy: default_review\nReason: Needs approval"

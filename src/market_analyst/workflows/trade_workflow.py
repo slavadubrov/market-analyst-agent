@@ -10,8 +10,10 @@ demonstrates the Guardian pattern:
 
 from typing import Literal
 
-from langgraph.checkpoint.postgres import PostgresSaver
+from langchain_core.runnables import RunnableConfig
+from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, START, StateGraph
+from langgraph.graph.state import CompiledStateGraph
 
 from market_analyst.nodes.guardian import guardian_node
 from market_analyst.nodes.trade_executor import trade_executor_node
@@ -61,7 +63,7 @@ def compliance_officer_node(state: AgentState) -> dict:
         return {}
 
 
-def create_trade_graph(checkpointer: PostgresSaver | None = None) -> StateGraph:
+def create_trade_graph(checkpointer: BaseCheckpointSaver | None = None) -> CompiledStateGraph:
     """Create the trade execution graph with Guardian.
 
     Graph Structure:
@@ -107,7 +109,7 @@ def run_trade(
     ticker: str,
     amount_usd: float,
     reason: str,
-    checkpointer: PostgresSaver | None = None,
+    checkpointer: BaseCheckpointSaver | None = None,
     thread_id: str | None = None,
 ) -> dict:
     """Execute a trade through the Guardian workflow.
@@ -149,13 +151,13 @@ def run_trade(
 
     # Configure thread
     thread_id = thread_id or str(uuid.uuid4())
-    config = {"configurable": {"thread_id": thread_id}}
+    config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
 
     # Run the graph
     result = graph.invoke(initial_state, config)
 
     # Check if we hit the HITL interrupt (only works with checkpointer)
-    requires_approval = False
+    requires_approval = bool(result.get("guardian_result") and result["guardian_result"].decision == GuardianDecision.ESCALATE)
     if checkpointer:
         state = graph.get_state(config)
         next_nodes = state.next if state else []
@@ -172,7 +174,7 @@ def run_trade(
 
 def approve_trade(
     thread_id: str,
-    checkpointer: PostgresSaver,
+    checkpointer: BaseCheckpointSaver,
     approve: bool = True,
     modified_amount: float | None = None,
 ) -> dict:
@@ -188,13 +190,15 @@ def approve_trade(
         Result dict with execution status
     """
     graph = create_trade_graph(checkpointer=checkpointer)
-    config = {"configurable": {"thread_id": thread_id}}
+    config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
 
     # Get current state
     current_state = graph.get_state(config)
 
     if not current_state or not current_state.values:
         raise ValueError(f"No state found for thread {thread_id}")
+    if "compliance_officer" not in current_state.next:
+        raise ValueError("Trade is not awaiting human approval")
 
     if not approve:
         # Reject the trade
@@ -203,12 +207,13 @@ def approve_trade(
         return {"thread_id": thread_id, "executed": False, "rejected": True}
 
     # Apply modifications if any
-    update_values = {"trade_approved": True}
+    update_values: dict[str, object] = {"trade_approved": True}
 
     if modified_amount is not None:
         pending = current_state.values.get("pending_trade")
         if pending:
-            pending.amount_usd = modified_amount
+            pending = TradeRequest.model_validate(pending)
+            pending = TradeRequest.model_validate({**pending.model_dump(), "amount_usd": modified_amount})
             update_values["pending_trade"] = pending
             print(f"\n📝 Trade amount modified to: ${modified_amount:,.2f}")
 

@@ -6,6 +6,7 @@ generated first, and then executed by a ReAct agent.
 """
 
 import os
+from typing import cast
 
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -56,8 +57,10 @@ def planner_node(state: AgentState) -> dict:
     """
     model_name = os.getenv(MODEL_ENV_VAR, DEFAULT_MODEL)
     llm = ChatAnthropic(
-        model=model_name,
+        model_name=model_name,
         temperature=0,
+        timeout=None,
+        stop=None,
     )
 
     # Get structured output
@@ -90,7 +93,7 @@ Consider this profile when planning the analysis."""
     ]
 
     try:
-        result: PlanOutput = structured_llm.invoke(messages)
+        result = cast(PlanOutput, structured_llm.invoke(messages))
 
         print(f"\n📋 Research plan created with {len(result.steps)} steps:")
         for step in result.steps:

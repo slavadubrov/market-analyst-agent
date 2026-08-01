@@ -10,6 +10,7 @@ Example output:
 """
 
 import os
+from typing import cast
 
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -60,8 +61,10 @@ def rewoo_planner_node(state: AgentState) -> dict:
     """
     model_name = os.getenv(MODEL_ENV_VAR, DEFAULT_MODEL)
     llm = ChatAnthropic(
-        model=model_name,
+        model_name=model_name,
         temperature=0,
+        timeout=None,
+        stop=None,
     )
 
     structured_llm = llm.with_structured_output(ReWOOPlanOutput)
@@ -91,7 +94,7 @@ Output a list of tool calls with:
     ]
 
     try:
-        result: ReWOOPlanOutput = structured_llm.invoke(messages)
+        result = cast(ReWOOPlanOutput, structured_llm.invoke(messages))
 
         print(f"\n⚡ ReWOO Plan created with {len(result.steps)} parallel tool calls:")
         for step in result.steps:

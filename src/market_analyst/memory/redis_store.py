@@ -3,7 +3,6 @@
 import os
 
 from langgraph.checkpoint.redis import RedisSaver
-from redis import Redis
 
 
 def get_connection_url() -> str:
@@ -17,15 +16,4 @@ def get_redis_saver() -> RedisSaver:
     Returns:
         Configured RedisSaver instance
     """
-    url = get_connection_url()
-    # We need to maintain a reference to the connection,
-    # but RedisSaver handles its own connection internally when passed a connection object or url.
-    # However, looking at docs, RedisSaver usually takes a sync or async connection.
-    # Let's create a sync Redis client.
-
-    # Note: langgraph-checkpoint-redis documentation usually suggests:
-    # conn = Redis.from_url(...)
-    # saver = RedisSaver(conn)
-
-    conn = Redis.from_url(url)
-    return RedisSaver(conn)
+    return RedisSaver(redis_url=get_connection_url())

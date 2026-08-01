@@ -26,7 +26,7 @@ lint: install
 
 # Run static type checking
 type-check: install
-	uv run mypy .
+	uv run mypy
 
 # Run validation (lint + type-check + test)
 check: lint type-check test

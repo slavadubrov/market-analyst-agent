@@ -2,8 +2,12 @@
 
 import atexit
 import os
+from typing import Any, cast
+from urllib.parse import quote
 
 from langgraph.checkpoint.postgres import PostgresSaver
+from psycopg import Connection
+from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
 
@@ -15,11 +19,11 @@ def get_connection_string() -> str:
     user = os.getenv("POSTGRES_USER", "analyst")
     password = os.getenv("POSTGRES_PASSWORD", "analyst_pass")
 
-    return f"postgresql://{user}:{password}@{host}:{port}/{db}"
+    return f"postgresql://{quote(user, safe='')}:{quote(password, safe='')}@{host}:{port}/{quote(db, safe='')}"
 
 
 # Global connection pool - reused across calls
-_connection_pool: ConnectionPool | None = None
+_connection_pool: ConnectionPool[Connection[dict[str, Any]]] | None = None
 
 
 def close_pool():
@@ -37,16 +41,19 @@ def close_pool():
 atexit.register(close_pool)
 
 
-def get_connection_pool() -> ConnectionPool:
+def get_connection_pool() -> ConnectionPool[Connection[dict[str, Any]]]:
     """Get or create the global connection pool."""
     global _connection_pool
     if _connection_pool is None:
         connection_string = get_connection_string()
-        _connection_pool = ConnectionPool(
-            connection_string,
-            min_size=1,
-            max_size=10,
-            kwargs={"autocommit": True},  # Important for setup() and checkpointing
+        _connection_pool = cast(
+            ConnectionPool[Connection[dict[str, Any]]],
+            ConnectionPool(
+                connection_string,
+                min_size=1,
+                max_size=10,
+                kwargs={"autocommit": True, "row_factory": dict_row},
+            ),
         )
     return _connection_pool
 

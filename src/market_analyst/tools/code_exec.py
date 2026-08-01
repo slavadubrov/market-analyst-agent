@@ -5,38 +5,60 @@ are impossible with static tool calls: loops, conditionals, ratio calculations,
 portfolio math. This demonstrates the biggest shift in agent tooling — letting
 agents write code instead of calling schemas one at a time.
 
-For production use, replace PythonAstREPLTool with a sandboxed environment
-like E2B (e2b.dev) or LangSmith Sandboxes.
+For production use, replace this restricted in-process evaluator with a
+process or container sandbox that also enforces CPU and memory limits.
 """
 
-import re
+import ast
+import builtins
+import io
+import json
+import math
+import statistics
+from contextlib import redirect_stdout
 
 from langchain_core.tools import tool
-from langchain_experimental.tools import PythonAstREPLTool
 from pydantic import BaseModel, Field
 
-# Patterns that should be blocked for safety
-_BLOCKED_PATTERNS = [
-    r"\bimport\s+os\b",
-    r"\bimport\s+subprocess\b",
-    r"\bimport\s+sys\b",
-    r"\bimport\s+shutil\b",
-    r"\bfrom\s+os\b",
-    r"\bfrom\s+subprocess\b",
-    r"\bfrom\s+sys\b",
-    r"\bfrom\s+shutil\b",
-    r"\b__import__\s*\(",
-    r"\bexec\s*\(",
-    r"\beval\s*\(",
-    r"\bopen\s*\(",
-    r"\bcompile\s*\(",
-]
+_ALLOWED_MODULES = {"json", "math", "statistics"}
+_ALLOWED_CALLS = {
+    "abs",
+    "bool",
+    "dict",
+    "enumerate",
+    "float",
+    "int",
+    "len",
+    "list",
+    "max",
+    "min",
+    "print",
+    "range",
+    "round",
+    "set",
+    "sorted",
+    "str",
+    "sum",
+    "tuple",
+    "zip",
+}
+_BLOCKED_NODES = (
+    ast.AsyncFunctionDef,
+    ast.Await,
+    ast.ClassDef,
+    ast.Delete,
+    ast.FunctionDef,
+    ast.Global,
+    ast.Lambda,
+    ast.Nonlocal,
+    ast.Try,
+    ast.While,
+    ast.With,
+)
 
-_BLOCKED_RE = re.compile("|".join(_BLOCKED_PATTERNS))
-
-# Pre-injected globals for the execution namespace
-_GLOBALS: dict = {}
-exec("import math, json, statistics", _GLOBALS)  # noqa: S102
+_GLOBALS = {"math": math, "json": json, "statistics": statistics}
+_BUILTINS = {name: getattr(builtins, name) for name in _ALLOWED_CALLS}
+_BUILTINS["__import__"] = builtins.__import__
 
 
 class CodeInput(BaseModel):
@@ -52,11 +74,31 @@ class CodeInput(BaseModel):
     )
 
 
-def _check_safety(code: str) -> str | None:
-    """Check code for blocked patterns. Returns error message or None."""
-    match = _BLOCKED_RE.search(code)
-    if match:
-        return f"Blocked: '{match.group()}' is not allowed for safety reasons."
+def _check_safety(code: str) -> str | None:  # noqa: C901
+    """Allow calculations while rejecting filesystem, process, and introspection access."""
+    try:
+        tree = ast.parse(code)
+    except SyntaxError as exc:
+        return f"Blocked: invalid Python syntax ({exc.msg})."
+
+    for node in ast.walk(tree):
+        if isinstance(node, _BLOCKED_NODES):
+            return f"Blocked: {type(node).__name__} is not allowed."
+        if isinstance(node, ast.Name) and node.id.startswith("_"):
+            return f"Blocked: name '{node.id}' is not allowed."
+        if isinstance(node, ast.Import):
+            if any(alias.name not in _ALLOWED_MODULES or alias.asname for alias in node.names):
+                return "Blocked: only math, json, and statistics imports are allowed."
+        if isinstance(node, ast.ImportFrom):
+            return "Blocked: from-imports are not allowed."
+        if isinstance(node, ast.Attribute):
+            if not isinstance(node.value, ast.Name) or node.value.id not in _ALLOWED_MODULES or node.attr.startswith("_"):
+                return "Blocked: attribute access is limited to approved modules."
+        if isinstance(node, ast.Call):
+            if isinstance(node.func, ast.Name) and node.func.id not in _ALLOWED_CALLS:
+                return f"Blocked: call to '{node.func.id}' is not allowed."
+            if not isinstance(node.func, (ast.Name, ast.Attribute)):
+                return "Blocked: dynamic calls are not allowed."
     return None
 
 
@@ -80,8 +122,14 @@ def execute_python_analysis(code: str) -> str:
     if error:
         return error
 
-    repl = PythonAstREPLTool(globals=_GLOBALS.copy())
-    result = repl.invoke(code)
-    if result is None or result == "":
+    output = io.StringIO()
+    namespace = {"__builtins__": _BUILTINS, **_GLOBALS}
+    try:
+        with redirect_stdout(output):
+            exec(compile(code, "<analysis>", "exec"), namespace)  # noqa: S102
+    except Exception as exc:
+        return f"Error: {type(exc).__name__}: {exc}"
+    result = output.getvalue().rstrip()
+    if not result:
         return "(Code executed successfully but produced no output. Use print() to return results.)"
-    return str(result)
+    return result

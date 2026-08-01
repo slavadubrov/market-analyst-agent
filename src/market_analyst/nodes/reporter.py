@@ -5,6 +5,7 @@ human approval before being finalized (HITL pattern).
 """
 
 import os
+from typing import cast
 
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -47,8 +48,10 @@ def reporter_node(state: AgentState) -> dict:
     """
     model_name = os.getenv(MODEL_ENV_VAR, DEFAULT_MODEL)
     llm = ChatAnthropic(
-        model=model_name,
+        model_name=model_name,
         temperature=0.3,  # Slightly more creative for report writing
+        timeout=None,
+        stop=None,
     )
 
     structured_llm = llm.with_structured_output(DraftReport)
@@ -89,7 +92,7 @@ Generate a complete DraftReport with your analysis and recommendation."""
     print(f"\n📝 Generating investment report for {ticker}...")
 
     try:
-        report: DraftReport = structured_llm.invoke(messages)
+        report = cast(DraftReport, structured_llm.invoke(messages))
 
         return {
             "draft_report": report,

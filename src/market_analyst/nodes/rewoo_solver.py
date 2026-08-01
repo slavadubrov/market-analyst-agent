@@ -5,6 +5,7 @@ This is the second key efficiency gain - only one synthesis call after all tools
 """
 
 import os
+from typing import Literal, cast
 
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -29,7 +30,7 @@ class FlashBriefingOutput(BaseModel):
     title: str = Field(description="Briefing title")
     summary: str = Field(description="2-3 sentence executive summary")
     analysis: str = Field(description="Key findings from the data, 3-5 bullet points")
-    recommendation: str = Field(description="One of: strong_buy, buy, hold, sell, strong_sell")
+    recommendation: Literal["strong_buy", "buy", "hold", "sell", "strong_sell"] = Field(description="Investment recommendation")
     confidence: float = Field(ge=0.0, le=1.0, description="Confidence in recommendation")
     risk_factors: list[str] = Field(description="Top 2-3 risk factors")
 
@@ -51,8 +52,10 @@ def rewoo_solver_node(state: AgentState) -> dict:
 
     model_name = os.getenv(MODEL_ENV_VAR, DEFAULT_MODEL)
     llm = ChatAnthropic(
-        model=model_name,
+        model_name=model_name,
         temperature=0,
+        timeout=None,
+        stop=None,
     )
 
     structured_llm = llm.with_structured_output(FlashBriefingOutput)
@@ -90,7 +93,7 @@ Create a flash briefing from this data. Be concise and actionable."""
 
     try:
         print("\n📝 Synthesizing flash briefing...")
-        result: FlashBriefingOutput = structured_llm.invoke(messages)
+        result = cast(FlashBriefingOutput, structured_llm.invoke(messages))
 
         # Convert to DraftReport format for consistency with the publish flow
         draft_report = DraftReport(

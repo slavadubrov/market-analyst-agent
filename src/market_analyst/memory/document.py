@@ -262,6 +262,8 @@ class DocumentMemory:
         safe = key.replace("/", "_").replace("\\", "_").replace(" ", "_")
         # Remove any other potentially problematic characters
         safe = "".join(c for c in safe if c.isalnum() or c in "._-")
+        if safe in {"", ".", ".."}:
+            raise ValueError("Document key must contain at least one safe character")
         return safe
 
 

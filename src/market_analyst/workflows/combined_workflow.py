@@ -27,8 +27,10 @@ import uuid
 from typing import Literal
 
 from langchain_core.messages import HumanMessage
-from langgraph.checkpoint.postgres import PostgresSaver
+from langchain_core.runnables import RunnableConfig
+from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, START, StateGraph
+from langgraph.graph.state import CompiledStateGraph
 
 from market_analyst.memory import load_user_profile
 from market_analyst.nodes.executor import executor_node
@@ -75,7 +77,7 @@ def create_trade_from_report_node(state: AgentState) -> dict:
     3. Setting up state for the Guardian to evaluate
     """
     report = state.draft_report
-    trade_amount = getattr(state, "_trade_amount", DEFAULT_TRADE_AMOUNT)
+    trade_amount = state.trade_amount
 
     if not report:
         print("  ⚠️  No report available to create trade from")
@@ -211,9 +213,9 @@ def skip_trade_check(state: AgentState) -> Literal["guardian", "end"]:
 
 
 def create_combined_graph(
-    checkpointer: PostgresSaver | None = None,
+    checkpointer: BaseCheckpointSaver | None = None,
     force_mode: ExecutionMode | None = None,
-) -> StateGraph:
+) -> CompiledStateGraph:
     """Create the combined Analysis → Guardian → Trade graph.
 
     Graph Structure:
@@ -321,7 +323,7 @@ def run_combined_analysis(
     query: str,
     user_id: str = "default",
     thread_id: str | None = None,
-    checkpointer: PostgresSaver | None = None,
+    checkpointer: BaseCheckpointSaver | None = None,
     force_mode: ExecutionMode | None = None,
     trade_amount: float = DEFAULT_TRADE_AMOUNT,
 ) -> dict:
@@ -340,6 +342,9 @@ def run_combined_analysis(
     Returns:
         Result dict with state, report, and trade info
     """
+    if checkpointer is None:
+        raise ValueError("Combined workflow requires persistence for its approval steps")
+
     # Load user profile
     user_profile = load_user_profile(user_id)
 
@@ -349,17 +354,15 @@ def run_combined_analysis(
         user_profile=user_profile,
         user_id=user_id,
         execution_mode=force_mode,
+        trade_amount=trade_amount,
     )
-
-    # Store trade amount in state (accessed by create_trade_from_report_node)
-    initial_state._trade_amount = trade_amount
 
     # Create graph
     graph = create_combined_graph(checkpointer=checkpointer, force_mode=force_mode)
 
     # Configure thread
     thread_id = thread_id or str(uuid.uuid4())
-    config = {"configurable": {"thread_id": thread_id}}
+    config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
 
     # Run the graph
     result = graph.invoke(initial_state, config)
@@ -388,7 +391,7 @@ def run_combined_analysis(
 
 def approve_combined_report(
     thread_id: str,
-    checkpointer: PostgresSaver,
+    checkpointer: BaseCheckpointSaver,
 ) -> dict:
     """Approve the report in the combined workflow and continue.
 
@@ -398,13 +401,15 @@ def approve_combined_report(
         Result dict - may require trade approval if Guardian escalates
     """
     graph = create_combined_graph(checkpointer=checkpointer)
-    config = {"configurable": {"thread_id": thread_id}}
+    config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
 
     # Get current state
     current_state = graph.get_state(config)
 
     if not current_state or not current_state.values:
         raise ValueError(f"No state found for thread {thread_id}")
+    if "publish" not in current_state.next:
+        raise ValueError("Workflow is not awaiting report approval")
 
     # Approve the report
     graph.update_state(config, {"report_approved": True})
@@ -429,7 +434,7 @@ def approve_combined_report(
 
 def approve_combined_trade(
     thread_id: str,
-    checkpointer: PostgresSaver,
+    checkpointer: BaseCheckpointSaver,
     approve: bool = True,
     modified_amount: float | None = None,
 ) -> dict:
@@ -445,12 +450,14 @@ def approve_combined_trade(
         Result dict with execution status
     """
     graph = create_combined_graph(checkpointer=checkpointer)
-    config = {"configurable": {"thread_id": thread_id}}
+    config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
 
     current_state = graph.get_state(config)
 
     if not current_state or not current_state.values:
         raise ValueError(f"No state found for thread {thread_id}")
+    if "compliance_officer" not in current_state.next:
+        raise ValueError("Workflow is not awaiting trade approval")
 
     if not approve:
         print("\n❌ Trade rejected by human reviewer")
@@ -458,12 +465,13 @@ def approve_combined_trade(
         return {"thread_id": thread_id, "executed": False, "rejected": True}
 
     # Apply modifications if any
-    update_values = {"trade_approved": True}
+    update_values: dict[str, object] = {"trade_approved": True}
 
     if modified_amount is not None:
         pending = current_state.values.get("pending_trade")
         if pending:
-            pending.amount_usd = modified_amount
+            pending = TradeRequest.model_validate(pending)
+            pending = TradeRequest.model_validate({**pending.model_dump(), "amount_usd": modified_amount})
             update_values["pending_trade"] = pending
             print(f"\n📝 Trade amount modified to: ${modified_amount:,.2f}")
 
