@@ -4,14 +4,12 @@ Takes the collected tool results and synthesizes a final answer in ONE LLM call.
 This is the second key efficiency gain - only one synthesis call after all tools complete.
 """
 
-import os
 from typing import Literal, cast
 
-from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
-from market_analyst.constants import DEFAULT_MODEL, MODEL_ENV_VAR
+from market_analyst.llm import get_structured_model
 from market_analyst.schemas import AgentState, DraftReport
 
 REWOO_SOLVER_PROMPT = """You are a senior investment analyst creating a quick briefing.
@@ -48,17 +46,9 @@ def rewoo_solver_node(state: AgentState) -> dict:
         Updated state with draft_report
     """
     if not state.rewoo_plan:
-        return {"error": "No ReWOO plan results to synthesize"}
+        return {"error": state.error or "No ReWOO plan results to synthesize"}
 
-    model_name = os.getenv(MODEL_ENV_VAR, DEFAULT_MODEL)
-    llm = ChatAnthropic(
-        model_name=model_name,
-        temperature=0,
-        timeout=None,
-        stop=None,
-    )
-
-    structured_llm = llm.with_structured_output(FlashBriefingOutput)
+    structured_llm = get_structured_model(FlashBriefingOutput)
 
     ticker = state.research_data.ticker if state.research_data else "UNKNOWN"
 

@@ -16,4 +16,6 @@ def get_redis_saver() -> RedisSaver:
     Returns:
         Configured RedisSaver instance
     """
-    return RedisSaver(redis_url=get_connection_url())
+    checkpointer = RedisSaver(redis_url=get_connection_url())
+    checkpointer.setup()
+    return checkpointer

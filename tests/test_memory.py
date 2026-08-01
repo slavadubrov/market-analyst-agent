@@ -138,6 +138,7 @@ def test_get_postgres_saver(mocker):
     _ = get_postgres_saver()
     mock_pool.assert_called_once()
     mock_saver.assert_called_once()
+    assert mock_saver.call_args.kwargs["serde"] is not None
     mock_saver.return_value.setup.assert_called_once()
 
 
@@ -157,6 +158,7 @@ def test_get_redis_saver(mocker):
 
     _ = get_redis_saver()
     mock_saver.assert_called_once_with(redis_url="redis://localhost:6379")
+    mock_saver.return_value.setup.assert_called_once()
 
 
 def test_search_profiles_uses_current_qdrant_api(mocker):

@@ -366,6 +366,8 @@ def run_combined_analysis(
 
     # Run the graph
     result = graph.invoke(initial_state, config)
+    if error := result.get("error"):
+        raise RuntimeError(error)
 
     # Check what state we're in
     requires_report_approval = False

@@ -86,7 +86,7 @@ def rewoo_worker_node(state: AgentState) -> dict:
         Updated state with tool results stored in rewoo_plan steps
     """
     if not state.rewoo_plan:
-        return {"error": "No ReWOO plan to execute"}
+        return {"error": state.error or "No ReWOO plan to execute"}
 
     print(f"\n🔧 Executing {len(state.rewoo_plan)} tool calls...")
 

@@ -43,10 +43,11 @@ def _get_optional_checkpointer(args):
         return None
     try:
         checkpointer = get_checkpointer()
-        print("   ✅ PostgreSQL checkpointing enabled")
+        provider = os.getenv("HOT_MEMORY_PROVIDER", "postgres").capitalize()
+        print(f"   ✅ {provider} checkpointing enabled")
         return checkpointer
     except Exception as e:
-        print(f"   ⚠️  PostgreSQL not available: {e}")
+        print(f"   ⚠️  Checkpoint storage not available: {e}")
         print("   Continuing without persistence...")
         return None
 
@@ -444,8 +445,8 @@ Examples:
 
     # Check for required env vars
     if not args.set_profile:
-        if not os.getenv("ANTHROPIC_API_KEY"):
-            print("❌ Error: ANTHROPIC_API_KEY environment variable not set")
+        if not (os.getenv("ANTHROPIC_API_KEY") or os.getenv("OPENAI_API_KEY")):
+            print("❌ Error: ANTHROPIC_API_KEY or OPENAI_API_KEY environment variable not set")
             print("   Copy .env.example to .env and add your API key")
             sys.exit(1)
 

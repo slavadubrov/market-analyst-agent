@@ -6,6 +6,7 @@ from typing import Any, cast
 from urllib.parse import quote
 
 from langgraph.checkpoint.postgres import PostgresSaver
+from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from psycopg import Connection
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
@@ -65,6 +66,24 @@ def get_postgres_saver() -> PostgresSaver:
         Configured PostgresSaver instance
     """
     pool = get_connection_pool()
-    checkpointer = PostgresSaver(pool)
+    serde = JsonPlusSerializer(
+        allowed_msgpack_modules=[
+            ("market_analyst.schemas", name)
+            for name in (
+                "AgentState",
+                "DraftReport",
+                "ExecutionMode",
+                "GuardianDecision",
+                "GuardianResult",
+                "PlanStep",
+                "ResearchData",
+                "ReWOOPlanStep",
+                "TradeRequest",
+                "TradeAction",
+                "UserProfile",
+            )
+        ],
+    )
+    checkpointer = PostgresSaver(pool, serde=serde)
     checkpointer.setup()
     return checkpointer

@@ -5,14 +5,12 @@ Classifies user requests to route between:
 - FLASH_BRIEFING: ReWOO (fast, token-efficient snapshot)
 """
 
-import os
 from typing import cast
 
-from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
-from market_analyst.constants import DEFAULT_MODEL, MODEL_ENV_VAR
+from market_analyst.llm import get_structured_model
 from market_analyst.schemas import AgentState, ExecutionMode, ResearchData
 
 ROUTER_SYSTEM_PROMPT = """You are an intent classifier for a stock analysis agent.
@@ -74,15 +72,7 @@ def router_node(state: AgentState) -> dict:
             "research_data": ResearchData(ticker=ticker),
         }
 
-    model_name = os.getenv(MODEL_ENV_VAR, DEFAULT_MODEL)
-    llm = ChatAnthropic(
-        model_name=model_name,
-        temperature=0,
-        timeout=None,
-        stop=None,
-    )
-
-    structured_llm = llm.with_structured_output(RouterOutput)
+    structured_llm = get_structured_model(RouterOutput)
 
     # Get the user's query
     user_messages = [m for m in state.messages if isinstance(m, HumanMessage)]

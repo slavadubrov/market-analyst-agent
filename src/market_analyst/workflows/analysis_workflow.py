@@ -263,6 +263,8 @@ def run_analysis(
 
     # Run the graph (will pause at publish node for approval)
     result = graph.invoke(initial_state, config)
+    if error := result.get("error"):
+        raise RuntimeError(error)
 
     return {
         "thread_id": thread_id,

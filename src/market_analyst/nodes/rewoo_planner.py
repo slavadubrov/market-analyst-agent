@@ -9,14 +9,12 @@ Example output:
     #E3 = get_price_history(ticker="NVDA", period="3mo")
 """
 
-import os
 from typing import cast
 
-from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
-from market_analyst.constants import DEFAULT_MODEL, MODEL_ENV_VAR
+from market_analyst.llm import get_structured_model
 from market_analyst.schemas import AgentState, ReWOOPlanStep
 
 REWOO_PLANNER_PROMPT = """You are a research analyst creating an efficient data gathering plan.
@@ -59,15 +57,7 @@ def rewoo_planner_node(state: AgentState) -> dict:
     Returns:
         Updated state with rewoo_plan
     """
-    model_name = os.getenv(MODEL_ENV_VAR, DEFAULT_MODEL)
-    llm = ChatAnthropic(
-        model_name=model_name,
-        temperature=0,
-        timeout=None,
-        stop=None,
-    )
-
-    structured_llm = llm.with_structured_output(ReWOOPlanOutput)
+    structured_llm = get_structured_model(ReWOOPlanOutput)
 
     ticker = state.research_data.ticker if state.research_data else "UNKNOWN"
 

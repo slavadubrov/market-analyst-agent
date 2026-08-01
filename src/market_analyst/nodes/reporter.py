@@ -4,13 +4,11 @@ This node synthesizes all research into a draft report that requires
 human approval before being finalized (HITL pattern).
 """
 
-import os
 from typing import cast
 
-from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from market_analyst.constants import DEFAULT_MODEL, MODEL_ENV_VAR
+from market_analyst.llm import get_structured_model
 from market_analyst.schemas import AgentState, DraftReport
 
 REPORTER_SYSTEM_PROMPT = """You are a senior investment analyst writing a research report.
@@ -46,15 +44,7 @@ def reporter_node(state: AgentState) -> dict:
     Returns:
         Updated state with draft_report
     """
-    model_name = os.getenv(MODEL_ENV_VAR, DEFAULT_MODEL)
-    llm = ChatAnthropic(
-        model_name=model_name,
-        temperature=0.3,  # Slightly more creative for report writing
-        timeout=None,
-        stop=None,
-    )
-
-    structured_llm = llm.with_structured_output(DraftReport)
+    structured_llm = get_structured_model(DraftReport, temperature=0.3)
 
     # Compile research findings
     research_summary = ""
