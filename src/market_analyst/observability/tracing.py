@@ -25,9 +25,7 @@ _initialized = False
 
 def _otlp_endpoint() -> str | None:
     """Return the configured OTLP endpoint, or None when telemetry should noop."""
-    endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT") or os.getenv(
-        "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"
-    )
+    endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT") or os.getenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT")
     # Treat empty string the same as unset to keep the "off" path simple.
     return endpoint or None
 
@@ -54,11 +52,8 @@ def setup_telemetry(service_name: str | None = None) -> Any:
     if _initialized:
         return trace.get_tracer_provider()
 
-    resource = Resource.create(
-        {
-            SERVICE_NAME: service_name or os.getenv("OTEL_SERVICE_NAME", "market-analyst-agent"),
-        }
-    )
+    resolved_service_name = service_name or os.getenv("OTEL_SERVICE_NAME") or "market-analyst-agent"
+    resource = Resource.create({SERVICE_NAME: resolved_service_name})
     provider = TracerProvider(resource=resource)
 
     endpoint = _otlp_endpoint()

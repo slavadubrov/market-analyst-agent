@@ -76,9 +76,7 @@ class BudgetTracker:
         self.tokens_used += max(0, int(input_tokens) + int(output_tokens))
         if self.token_budget is not None and self.tokens_used > self.token_budget:
             self._abort("token_budget")
-            raise BudgetExceeded(
-                f"Token budget exceeded: {self.tokens_used} > {self.token_budget}"
-            )
+            raise BudgetExceeded(f"Token budget exceeded: {self.tokens_used} > {self.token_budget}")
 
     # --- Tool-call accounting ---------------------------------------------
 
@@ -90,20 +88,13 @@ class BudgetTracker:
         else:
             self.consecutive_errors = 0
 
-        if (
-            self.tool_call_budget is not None
-            and self.tool_calls_used > self.tool_call_budget
-        ):
+        if self.tool_call_budget is not None and self.tool_calls_used > self.tool_call_budget:
             self._abort("tool_call_budget")
-            raise BudgetExceeded(
-                f"Tool-call budget exceeded: {self.tool_calls_used} > {self.tool_call_budget}"
-            )
+            raise BudgetExceeded(f"Tool-call budget exceeded: {self.tool_calls_used} > {self.tool_call_budget}")
 
         if self.consecutive_errors >= self.consecutive_error_threshold:
             self._abort("circuit_breaker")
-            raise CircuitBreakerOpen(
-                f"Circuit breaker tripped after {self.consecutive_errors} consecutive tool errors"
-            )
+            raise CircuitBreakerOpen(f"Circuit breaker tripped after {self.consecutive_errors} consecutive tool errors")
 
     # --- State plumbing ---------------------------------------------------
 

@@ -29,7 +29,7 @@ import json
 import os
 import uuid
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 import redis
 
@@ -39,8 +39,9 @@ CONSUMER_GROUP = os.getenv("RUN_QUEUE_GROUP", "workers")
 
 def _redis_client(url: str | None = None) -> redis.Redis:
     """Build a Redis client. URL precedence: arg > REDIS_URL > default."""
+    redis_url = url or os.getenv("REDIS_URL") or "redis://localhost:6379"
     return redis.Redis.from_url(
-        url or os.getenv("REDIS_URL", "redis://localhost:6379"),
+        redis_url,
         decode_responses=True,
     )
 
@@ -102,12 +103,15 @@ def pull_one(
     """Block for one message; return ``None`` on timeout."""
     r = client or _redis_client()
     ensure_consumer_group(r)
-    streams = r.xreadgroup(
-        groupname=CONSUMER_GROUP,
-        consumername=consumer_name,
-        streams={STREAM_KEY: ">"},
-        count=1,
-        block=block_ms,
+    streams = cast(
+        list[tuple[str, list[tuple[str, dict[str, str]]]]],
+        r.xreadgroup(
+            groupname=CONSUMER_GROUP,
+            consumername=consumer_name,
+            streams={STREAM_KEY: ">"},
+            count=1,
+            block=block_ms,
+        ),
     )
     if not streams:
         return None
@@ -129,7 +133,7 @@ def queue_depth(client: redis.Redis | None = None) -> int:
     """Return the number of un-acked messages — useful for backpressure dashboards."""
     r = client or _redis_client()
     try:
-        info = r.xinfo_groups(STREAM_KEY)
+        info = cast(list[dict[str, Any]], r.xinfo_groups(STREAM_KEY))
     except redis.ResponseError:
         return 0
     for group in info:

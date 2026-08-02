@@ -41,7 +41,8 @@ def test_list_thread_history(mocker):
     mock_checkpointer = mocker.MagicMock()
     # Mock return value of .list()
     mock_checkpoint = mocker.MagicMock()
-    mock_checkpoint.config = {"checkpoint_id": "cp1"}
+    mock_checkpoint.config = {"configurable": {"checkpoint_id": "cp1"}}
+    mock_checkpoint.checkpoint = {"ts": "2024-01-01"}
     mock_checkpoint.metadata = {"created_at": "2024-01-01", "step": 1}
     mock_checkpointer.list.return_value = [mock_checkpoint]
 
@@ -101,6 +102,14 @@ def test_long_term_memory_save_profile(mocker):
     assert points[0].payload["user_id"] == "u1"
 
 
+def test_load_user_profile_falls_back_when_qdrant_is_unavailable(mocker):
+    """Analysis can run in no-persistence mode without Qdrant."""
+    from market_analyst.memory.long import load_user_profile
+
+    mocker.patch("market_analyst.memory.long.get_long_term_memory", side_effect=ConnectionError)
+    assert load_user_profile("u1") == UserProfile()
+
+
 # --- Test Postgres Store (postgres_store.py) ---
 
 
@@ -129,6 +138,7 @@ def test_get_postgres_saver(mocker):
     _ = get_postgres_saver()
     mock_pool.assert_called_once()
     mock_saver.assert_called_once()
+    assert mock_saver.call_args.kwargs["serde"] is not None
     mock_saver.return_value.setup.assert_called_once()
 
 
@@ -144,9 +154,30 @@ def test_redis_connection_url(mocker):
 
 def test_get_redis_saver(mocker):
     """Test creating RedisSaver."""
-    mock_redis = mocker.patch("market_analyst.memory.redis_store.Redis")
     mock_saver = mocker.patch("market_analyst.memory.redis_store.RedisSaver")
 
     _ = get_redis_saver()
-    mock_redis.from_url.assert_called_once()
-    mock_saver.assert_called_once()
+    mock_saver.assert_called_once_with(redis_url="redis://localhost:6379")
+    mock_saver.return_value.setup.assert_called_once()
+
+
+def test_search_profiles_uses_current_qdrant_api(mocker):
+    """Vector search uses query_points, removed search() is never called."""
+    mocker.patch("market_analyst.memory.long.ensure_collection")
+    mock_client = mocker.patch("market_analyst.memory.long.get_client").return_value
+    mock_client.query_points.return_value.points = []
+
+    assert LongTermMemory().search_profiles([0.0] * 768) == []
+    mock_client.query_points.assert_called_once()
+
+
+def test_document_memory_rejects_empty_or_parent_keys(tmp_path):
+    """Sanitization cannot target an unnamed document."""
+    import pytest
+
+    from market_analyst.memory.document import DocumentMemory
+
+    memory = DocumentMemory(tmp_path)
+    for key in ("", ".", ".."):
+        with pytest.raises(ValueError):
+            memory.write_doc("research", key, "content")

@@ -69,8 +69,8 @@ def parse_trade_request(tool_output: str) -> TradeRequest | None:
     if not tool_output.startswith("TRADE_REQUEST:"):
         return None
 
-    import json
-
     json_str = tool_output[len("TRADE_REQUEST:") :]
-    data = json.loads(json_str)
-    return TradeRequest(**data)
+    try:
+        return TradeRequest.model_validate_json(json_str)
+    except ValueError:
+        return None

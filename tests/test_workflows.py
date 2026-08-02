@@ -1,11 +1,17 @@
 from pathlib import Path
 
+import pytest
+
+from market_analyst.app import _handle_combined_result
+from market_analyst.nodes.rewoo_worker import rewoo_worker_node
 from market_analyst.schemas import (
     AgentState,
     DraftReport,
     GuardianDecision,
     GuardianResult,
+    ReWOOPlanStep,
     TradeAction,
+    UserProfile,
 )
 from market_analyst.workflows.analysis_workflow import (
     ExecutionMode,
@@ -13,10 +19,12 @@ from market_analyst.workflows.analysis_workflow import (
     publish_node,
     route_after_executor,
     route_after_router,
+    run_analysis,
 )
 from market_analyst.workflows.combined_workflow import (
     create_combined_graph,
     create_trade_from_report_node,
+    run_combined_analysis,
 )
 from market_analyst.workflows.trade_workflow import (
     create_trade_graph,
@@ -61,6 +69,19 @@ def test_create_graph_compilation_smoke(mocker):
 
     graph = create_graph(checkpointer=None)
     assert graph == "compiled_graph"
+
+
+def test_run_analysis_raises_workflow_errors(mocker):
+    graph = mocker.MagicMock()
+    graph.invoke.return_value = {"error": "planning failed"}
+    mocker.patch(
+        "market_analyst.workflows.analysis_workflow.load_user_profile",
+        return_value=UserProfile(),
+    )
+    mocker.patch("market_analyst.workflows.analysis_workflow.create_graph", return_value=graph)
+
+    with pytest.raises(RuntimeError, match="planning failed"):
+        run_analysis("Analyze NVDA", force_mode=ExecutionMode.FLASH_BRIEFING)
 
 
 def test_publish_node(mocker):
@@ -195,3 +216,62 @@ def test_create_combined_graph_smoke(mocker):
     mock_graph.compile.return_value = "compiled_graph"
     create_combined_graph()
     mock_graph.compile.assert_called()
+
+
+def test_run_combined_analysis_raises_workflow_errors(mocker):
+    graph = mocker.MagicMock()
+    graph.invoke.return_value = {"error": "planning failed"}
+    mocker.patch(
+        "market_analyst.workflows.combined_workflow.load_user_profile",
+        return_value=UserProfile(),
+    )
+    mocker.patch("market_analyst.workflows.combined_workflow.create_combined_graph", return_value=graph)
+
+    with pytest.raises(RuntimeError, match="planning failed"):
+        run_combined_analysis(
+            "Analyze NVDA",
+            checkpointer=mocker.MagicMock(),
+            force_mode=ExecutionMode.FLASH_BRIEFING,
+        )
+
+
+def test_rewoo_worker_respects_dependency_chains(mocker):
+    """A dependent step never runs before its transitive dependency."""
+    calls = []
+
+    def fake_execute(step, results):
+        calls.append((step.step_id, set(results)))
+        return step.step_id
+
+    mocker.patch("market_analyst.nodes.rewoo_worker.execute_tool", side_effect=fake_execute)
+    state = AgentState(
+        rewoo_plan=[
+            ReWOOPlanStep(step_id="#E1", description="one", tool_name="x"),
+            ReWOOPlanStep(step_id="#E2", description="two", tool_name="x", depends_on=["#E1"]),
+            ReWOOPlanStep(step_id="#E3", description="three", tool_name="x", depends_on=["#E2"]),
+        ]
+    )
+
+    result = rewoo_worker_node(state)
+
+    assert calls == [("#E1", set()), ("#E2", {"#E1"}), ("#E3", {"#E1", "#E2"})]
+    assert [step.result for step in result["rewoo_plan"]] == ["#E1", "#E2", "#E3"]
+
+
+def test_combined_ui_returns_trade_info_as_its_own_output():
+    """Trade details target the textbox, not the approval group."""
+    outputs = _handle_combined_result(
+        {
+            "requires_trade_approval": True,
+            "guardian_result": GuardianResult(
+                decision=GuardianDecision.ESCALATE,
+                policy_name="default_review",
+                reason="Needs approval",
+            ),
+        },
+        "started",
+        "thread-1",
+    )
+
+    assert len(outputs) == 6
+    assert outputs[4] == "Policy: default_review\nReason: Needs approval"

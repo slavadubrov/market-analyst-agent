@@ -95,15 +95,11 @@ The agent demonstrates **four distinct tool modalities**, following [ACI (Agent-
 
 ### Step 1: Get Your API Keys
 
-#### Anthropic API Key (Claude)
+#### Model API Key
 
-1. Go to [console.anthropic.com](https://console.anthropic.com/)
-2. Sign up or log in to your account
-3. Navigate to **API Keys** in the left sidebar
-4. Click **Create Key** and copy the generated key
-5. Save this as `ANTHROPIC_API_KEY`
+Configure either `OPENAI_API_KEY` from [platform.openai.com](https://platform.openai.com/api-keys) or `ANTHROPIC_API_KEY` from [console.anthropic.com](https://console.anthropic.com/). When both are present, the default `auto` provider uses OpenAI; set `MARKET_ANALYST_PROVIDER=anthropic` to force Claude.
 
-> **Note**: Anthropic requires a payment method. New accounts typically get $5 in free credits.
+Both providers require API billing; ChatGPT and Claude subscriptions do not include API usage.
 
 #### Tavily API Key (Web Search)
 
@@ -148,6 +144,8 @@ Edit `.env` with your API keys:
 
 ```bash
 ANTHROPIC_API_KEY=sk-ant-api03-xxxxxxxxxxxxx
+# Or use OpenAI (preferred when both keys are present):
+OPENAI_API_KEY=sk-xxxxxxxxxxxxx
 TAVILY_API_KEY=tvly-xxxxxxxxxxxxx
 
 # PostgreSQL (defaults work with docker-compose)
@@ -320,7 +318,9 @@ skills/
 
 | Variable | Required | Description | Default |
 |----------|----------|-------------|---------|
-| `ANTHROPIC_API_KEY` | Yes | Anthropic API key for Claude | - |
+| `ANTHROPIC_API_KEY` | One provider required | Anthropic API key for Claude | - |
+| `OPENAI_API_KEY` | One provider required | OpenAI API key; preferred when both keys are set | - |
+| `MARKET_ANALYST_PROVIDER` | No | `auto`, `openai`, or `anthropic` | `auto` |
 | `TAVILY_API_KEY` | Yes | Tavily API key for web search | - |
 | `POSTGRES_HOST` | No | PostgreSQL host | `localhost` |
 | `POSTGRES_PORT` | No | PostgreSQL port | `5432` |

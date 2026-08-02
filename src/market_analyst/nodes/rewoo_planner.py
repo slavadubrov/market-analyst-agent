@@ -9,14 +9,13 @@ Example output:
     #E3 = get_price_history(ticker="NVDA", period="3mo")
 """
 
-import os
+from typing import cast
 
-from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel, Field
 
-from market_analyst.constants import DEFAULT_MODEL, MODEL_ENV_VAR
+from market_analyst.llm import get_structured_model
 from market_analyst.nodes._telemetry import node_callbacks
 from market_analyst.schemas import AgentState, ReWOOPlanStep
 
@@ -61,13 +60,7 @@ def rewoo_planner_node(state: AgentState, config: RunnableConfig | None = None) 
     Returns:
         Updated state with rewoo_plan
     """
-    model_name = os.getenv(MODEL_ENV_VAR, DEFAULT_MODEL)
-    llm = ChatAnthropic(
-        model=model_name,
-        temperature=0,
-    )
-
-    structured_llm = llm.with_structured_output(ReWOOPlanOutput)
+    structured_llm = get_structured_model(ReWOOPlanOutput)
 
     ticker = state.research_data.ticker if state.research_data else "UNKNOWN"
 
@@ -94,9 +87,12 @@ Output a list of tool calls with:
     ]
 
     try:
-        result: ReWOOPlanOutput = structured_llm.invoke(
-            messages,
-            config={"callbacks": node_callbacks(node_name="rewoo_planner", config=config)},
+        result = cast(
+            ReWOOPlanOutput,
+            structured_llm.invoke(
+                messages,
+                config={"callbacks": node_callbacks(node_name="rewoo_planner", config=config)},
+            ),
         )
 
         print(f"\n⚡ ReWOO Plan created with {len(result.steps)} parallel tool calls:")

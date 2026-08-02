@@ -78,9 +78,7 @@ class IdempotencyStore:
         tmp.write_text(json.dumps(result), encoding="utf-8")
         tmp.replace(path)
 
-    def reserve_or_replay(
-        self, thread_id: str, tool_call_id: str
-    ) -> tuple[bool, Any | None]:
+    def reserve_or_replay(self, thread_id: str, tool_call_id: str) -> tuple[bool, Any | None]:
         """Atomically: if seen, return ``(True, prior_result)``; else mark seen.
 
         The "reserve" semantics mean: by the time you call the underlying side

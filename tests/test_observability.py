@@ -208,9 +208,7 @@ def test_callback_handler_emits_tool_spans():
     from uuid import uuid4
 
     run_id = uuid4()
-    handler.on_tool_start(
-        serialized={"name": "my_tool"}, input_str="", run_id=run_id
-    )
+    handler.on_tool_start(serialized={"name": "my_tool"}, input_str="", run_id=run_id)
     assert run_id in handler._spans
 
     handler.on_tool_end(output="result", run_id=run_id)
@@ -248,9 +246,7 @@ def test_llm_span_can_record_a_quick_completion(monkeypatch):
         def labels(self, *_args: Any, **_kw: Any) -> FakeHist:
             return FakeHist()
 
-    monkeypatch.setattr(
-        instrumentation_mod.metrics, "operation_duration", FakeDurationCounter()
-    )
+    monkeypatch.setattr(instrumentation_mod.metrics, "operation_duration", FakeDurationCounter())
 
     with llm_span(model="claude-test", agent_name="test"):
         time.sleep(0.01)

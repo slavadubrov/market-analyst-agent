@@ -100,12 +100,7 @@ class GenAICallbackHandler(BaseCallbackHandler):
 
     def _open_llm_span(self, serialized: dict[str, Any], run_id: UUID, kwargs: dict[str, Any]) -> None:
         # Best-effort model resolution: callback metadata > constructor default.
-        model = (
-            (kwargs.get("invocation_params") or {}).get("model")
-            or (serialized.get("kwargs") or {}).get("model")
-            or self.model
-            or "unknown"
-        )
+        model = (kwargs.get("invocation_params") or {}).get("model") or (serialized.get("kwargs") or {}).get("model") or self.model or "unknown"
         span_name = f"{SPAN_NAME_CHAT} {model}"
         span = self._tracer.start_span(span_name)
         span.set_attribute(GenAIAttrs.OPERATION_NAME, SPAN_NAME_CHAT)
@@ -122,7 +117,7 @@ class GenAICallbackHandler(BaseCallbackHandler):
         entry = self._spans.pop(run_id, None)
         if entry is None:
             return
-        span, started, _, model = entry
+        span, started, _kind, model = entry
         try:
             usage = self._extract_token_usage(response)
             if usage is not None:
@@ -132,16 +127,10 @@ class GenAICallbackHandler(BaseCallbackHandler):
                 if output_tokens:
                     span.set_attribute(GenAIAttrs.OUTPUT_TOKENS, int(output_tokens))
                 if input_tokens or output_tokens:
-                    span.set_attribute(
-                        GenAIAttrs.TOTAL_TOKENS, int(input_tokens) + int(output_tokens)
-                    )
-                metrics.record_tokens(
-                    self.agent_name, model, int(input_tokens or 0), int(output_tokens or 0)
-                )
+                    span.set_attribute(GenAIAttrs.TOTAL_TOKENS, int(input_tokens) + int(output_tokens))
+                metrics.record_tokens(self.agent_name, model, int(input_tokens or 0), int(output_tokens or 0))
         finally:
-            metrics.operation_duration.labels(
-                SPAN_NAME_CHAT, model or "unknown", self.agent_name
-            ).observe(time.monotonic() - started)
+            metrics.operation_duration.labels(SPAN_NAME_CHAT, model or "unknown", self.agent_name).observe(time.monotonic() - started)
             span.end()
 
     def on_llm_error(self, error: BaseException, *, run_id: UUID, **_: Any) -> None:
@@ -170,20 +159,16 @@ class GenAICallbackHandler(BaseCallbackHandler):
         entry = self._spans.pop(run_id, None)
         if entry is None:
             return
-        span, started, _, tool_name = entry
-        metrics.operation_duration.labels(
-            SPAN_NAME_EXECUTE_TOOL, "n/a", self.agent_name
-        ).observe(time.monotonic() - started)
+        span, started, _kind, tool_name = entry
+        metrics.operation_duration.labels(SPAN_NAME_EXECUTE_TOOL, "n/a", self.agent_name).observe(time.monotonic() - started)
         metrics.record_tool_call(tool_name, "ok")
         span.end()
 
     def on_tool_error(self, error: BaseException, *, run_id: UUID, **_: Any) -> None:
         entry = self._spans.pop(run_id, None)
         if entry is not None:
-            _, started, _, tool_name = entry
-            metrics.operation_duration.labels(
-                SPAN_NAME_EXECUTE_TOOL, "n/a", self.agent_name
-            ).observe(time.monotonic() - started)
+            _span, started, _kind, tool_name = entry
+            metrics.operation_duration.labels(SPAN_NAME_EXECUTE_TOOL, "n/a", self.agent_name).observe(time.monotonic() - started)
             metrics.record_tool_call(tool_name, "error")
             metrics.record_tool_error(tool_name, type(error).__name__)
         self._fail_span(run_id, error, _entry=entry)

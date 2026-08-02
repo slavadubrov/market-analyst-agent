@@ -83,9 +83,7 @@ def llm_span(
             span.set_status(Status(StatusCode.ERROR, str(exc)))
             raise
         finally:
-            metrics.operation_duration.labels(
-                operation, model or "unknown", agent_name
-            ).observe(time.monotonic() - started)
+            metrics.operation_duration.labels(operation, model or "unknown", agent_name).observe(time.monotonic() - started)
 
 
 @contextmanager
@@ -125,9 +123,7 @@ def tool_span(
             span.set_status(Status(StatusCode.ERROR, str(exc)))
             raise
         finally:
-            metrics.operation_duration.labels(
-                SPAN_NAME_EXECUTE_TOOL, "n/a", agent_name
-            ).observe(time.monotonic() - started)
+            metrics.operation_duration.labels(SPAN_NAME_EXECUTE_TOOL, "n/a", agent_name).observe(time.monotonic() - started)
             metrics.record_tool_call(tool_name, outcome)
             if err_type:
                 metrics.record_tool_error(tool_name, err_type)

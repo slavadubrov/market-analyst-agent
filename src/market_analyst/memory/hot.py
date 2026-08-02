@@ -7,15 +7,18 @@ This module enables:
 """
 
 import os
+from collections.abc import Iterator
 from contextlib import contextmanager
+from typing import Any
 
-from langgraph.checkpoint.base import BaseCheckpointSaver
+from langchain_core.runnables import RunnableConfig
+from langgraph.checkpoint.base import BaseCheckpointSaver, Checkpoint
 
 from market_analyst.memory.postgres_store import get_postgres_saver
 from market_analyst.memory.redis_store import get_redis_saver
 
 
-def get_checkpointer() -> BaseCheckpointSaver:
+def get_checkpointer() -> BaseCheckpointSaver[Any]:
     """Create and configure a checkpointer (Postgres or Redis).
 
     The checkpointer stores:
@@ -37,7 +40,7 @@ def get_checkpointer() -> BaseCheckpointSaver:
 
 
 @contextmanager
-def checkpointer_context():
+def checkpointer_context() -> Iterator[BaseCheckpointSaver[Any]]:
     """Context manager for checkpointer that ensures proper cleanup.
 
     Usage:
@@ -52,7 +55,7 @@ def checkpointer_context():
         pass  # Pool manages connection lifecycle, handled by postgres module
 
 
-def get_thread_state(thread_id: str, checkpointer: BaseCheckpointSaver) -> dict | None:
+def get_thread_state(thread_id: str, checkpointer: BaseCheckpointSaver[Any]) -> Checkpoint | None:
     """Retrieve the latest state for a thread.
 
     Useful for debugging or resuming a conversation.
@@ -65,13 +68,13 @@ def get_thread_state(thread_id: str, checkpointer: BaseCheckpointSaver) -> dict 
         The latest state dict, or None if not found
     """
     try:
-        config = {"configurable": {"thread_id": thread_id}}
+        config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
         return checkpointer.get(config)
     except Exception:
         return None
 
 
-def list_thread_history(thread_id: str, checkpointer: BaseCheckpointSaver, limit: int = 10) -> list:
+def list_thread_history(thread_id: str, checkpointer: BaseCheckpointSaver[Any], limit: int = 10) -> list[dict[str, Any]]:
     """List checkpoint history for a thread.
 
     Enables "time travel" by listing all saved states.
@@ -84,15 +87,15 @@ def list_thread_history(thread_id: str, checkpointer: BaseCheckpointSaver, limit
     Returns:
         List of checkpoint metadata
     """
-    config = {"configurable": {"thread_id": thread_id}}
-    history = []
+    config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
+    history: list[dict[str, Any]] = []
 
     for checkpoint in checkpointer.list(config, limit=limit):
         history.append(
             {
-                "checkpoint_id": checkpoint.config.get("checkpoint_id"),
+                "checkpoint_id": checkpoint.config.get("configurable", {}).get("checkpoint_id"),
                 "thread_id": thread_id,
-                "timestamp": checkpoint.metadata.get("created_at"),
+                "timestamp": checkpoint.checkpoint.get("ts"),
                 "step": checkpoint.metadata.get("step"),
             }
         )

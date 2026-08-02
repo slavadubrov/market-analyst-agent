@@ -1,19 +1,20 @@
 FROM python:3.13-slim
 
 # Install uv for fast package management
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.11.26 /uv /usr/local/bin/uv
 
 WORKDIR /app
 
 # Copy project files
 COPY pyproject.toml .
+COPY uv.lock .
 COPY README.md .
 COPY src/ src/
+COPY skills/ skills/
 
 # Install dependencies with uv
-RUN uv venv /app/.venv
 ENV PATH="/app/.venv/bin:$PATH"
-RUN uv pip install -e .
+RUN uv sync --frozen --no-dev
 
 # Create non-root user for security
 RUN useradd -m analyst && chown -R analyst /app

@@ -12,6 +12,7 @@ import traceback
 import uuid
 
 from dotenv import load_dotenv
+from langchain_core.runnables import RunnableConfig
 
 from market_analyst.constants import DEFAULT_MODEL_KEY, MODEL_ENV_VAR, MODEL_MAP
 from market_analyst.logging_config import setup_logging
@@ -31,6 +32,7 @@ from market_analyst.workflows.analysis_workflow import (
 )
 from market_analyst.workflows.combined_workflow import (
     approve_combined_report,
+    approve_combined_trade,
     run_combined_analysis,
 )
 from market_analyst.workflows.trade_workflow import approve_trade, run_trade
@@ -42,10 +44,11 @@ def _get_optional_checkpointer(args):
         return None
     try:
         checkpointer = get_checkpointer()
-        print("   ✅ PostgreSQL checkpointing enabled")
+        provider = os.getenv("HOT_MEMORY_PROVIDER", "postgres").capitalize()
+        print(f"   ✅ {provider} checkpointing enabled")
         return checkpointer
     except Exception as e:
-        print(f"   ⚠️  PostgreSQL not available: {e}")
+        print(f"   ⚠️  Checkpoint storage not available: {e}")
         print("   Continuing without persistence...")
         return None
 
@@ -138,9 +141,9 @@ def _print_combined_result(result, thread_id, args):
             print("\n⚠️  Running with --no-persist: approval workflow disabled")
         else:
             print("\nTo approve this trade:")
-            print(f"  uv run market-analyst --approve-trade --thread-id {thread_id}")
+            print(f"  uv run market-analyst --approve-trade --combined --thread-id {thread_id}")
             print("\nTo reject this trade:")
-            print(f"  uv run market-analyst --reject-trade --thread-id {thread_id}")
+            print(f"  uv run market-analyst --reject-trade --combined --thread-id {thread_id}")
         return
 
     if result.get("trade_executed"):
@@ -443,8 +446,8 @@ Examples:
 
     # Check for required env vars
     if not args.set_profile:
-        if not os.getenv("ANTHROPIC_API_KEY"):
-            print("❌ Error: ANTHROPIC_API_KEY environment variable not set")
+        if not (os.getenv("ANTHROPIC_API_KEY") or os.getenv("OPENAI_API_KEY")):
+            print("❌ Error: ANTHROPIC_API_KEY or OPENAI_API_KEY environment variable not set")
             print("   Copy .env.example to .env and add your API key")
             sys.exit(1)
 
@@ -509,9 +512,7 @@ def _print_analysis_result(result, args, thread_id):
         if result.get("draft_report"):
             print(format_report_for_display(result["draft_report"]))
         if args.no_persist:
-            print("\n⚠️  Running with --no-persist: approval workflow disabled")
-            print("   (Run without --no-persist to enable save/approve workflow)")
-            print("\n✅ Analysis complete (auto-approved in no-persist mode)")
+            print("\n✅ Draft analysis complete (not published in --no-persist mode)")
         else:
             print("\nTo approve and publish:")
             print(f"  uv run market-analyst --approve --thread-id {thread_id}")
@@ -572,7 +573,7 @@ def resume_analysis(args):
         checkpointer = get_checkpointer()
         graph = create_graph(checkpointer=checkpointer)
 
-        config = {"configurable": {"thread_id": args.thread_id}}
+        config: RunnableConfig = {"configurable": {"thread_id": args.thread_id}}
 
         # Get current state
         state = graph.get_state(config)
@@ -615,9 +616,9 @@ def _approve_combined_report(args, checkpointer):
             print(f"\n   Policy: {guardian_result.policy_name}")
             print(f"   Reason: {guardian_result.reason}")
         print("\nTo approve this trade:")
-        print(f"  uv run market-analyst --approve-trade --thread-id {args.thread_id}")
+        print(f"  uv run market-analyst --approve-trade --combined --thread-id {args.thread_id}")
         print("\nTo reject this trade:")
-        print(f"  uv run market-analyst --reject-trade --thread-id {args.thread_id}")
+        print(f"  uv run market-analyst --reject-trade --combined --thread-id {args.thread_id}")
     elif result.get("trade_executed"):
         print("\n" + "=" * 60)
         print("🎉 Combined workflow complete!")
@@ -741,7 +742,8 @@ def handle_trade_approval(args):
     try:
         checkpointer = get_checkpointer()
 
-        result = approve_trade(
+        approve_fn = approve_combined_trade if args.combined else approve_trade
+        result = approve_fn(
             thread_id=args.thread_id,
             checkpointer=checkpointer,
             approve=args.approve_trade,

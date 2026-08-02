@@ -13,6 +13,8 @@ from pydantic import BaseModel, Field, field_validator
 from tavily import TavilyClient
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
+from market_analyst.utils import normalize_ticker
+
 # ---------------------------------------------------------------------------
 # Retry decorator for transient API failures
 # ---------------------------------------------------------------------------
@@ -34,14 +36,19 @@ class CompetitorQuery(BaseModel):
     """Validated input for competitor search."""
 
     ticker: str = Field(description="Stock ticker symbol to find competitors for")
+    max_results: int = Field(default=3, ge=1, le=10)
 
     @field_validator("ticker")
     @classmethod
     def validate_ticker(cls, v: str) -> str:
-        v = v.upper().strip()
-        if not v.isalpha() or len(v) > 5:
-            raise ValueError(f"Invalid ticker format: {v}")
-        return v
+        return normalize_ticker(v)
+
+
+class NewsQuery(BaseModel):
+    """Validated input for news search."""
+
+    query: str = Field(min_length=1, max_length=500)
+    max_results: int = Field(default=5, ge=1, le=10)
 
 
 # ---------------------------------------------------------------------------
@@ -150,7 +157,7 @@ def _search_news_impl(
 # ---------------------------------------------------------------------------
 
 
-@tool
+@tool(args_schema=NewsQuery)
 def search_news(
     query: str,
     max_results: int = 5,

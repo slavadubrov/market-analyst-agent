@@ -24,6 +24,8 @@ Production overrides the default by setting the env var.
 
 from __future__ import annotations
 
+import base64
+import binascii
 import logging
 import os
 from typing import Any
@@ -33,7 +35,7 @@ logger = logging.getLogger(__name__)
 ENCRYPTION_KEY_ENV = "CHECKPOINT_ENCRYPTION_KEY"
 
 
-def get_encrypted_serializer() -> Any | None:
+def get_encrypted_serializer(serde: Any = None) -> Any | None:
     """Return an EncryptedSerializer if a key is configured, else ``None``.
 
     Soft-fails when the LangGraph version in use does not ship the encrypted
@@ -48,15 +50,18 @@ def get_encrypted_serializer() -> Any | None:
         from langgraph.checkpoint.serde.encrypted import EncryptedSerializer  # type: ignore
     except ImportError:
         logger.warning(
-            "%s is set but langgraph.checkpoint.serde.encrypted is unavailable; "
-            "running without checkpoint encryption.",
+            "%s is set but langgraph.checkpoint.serde.encrypted is unavailable; running without checkpoint encryption.",
             ENCRYPTION_KEY_ENV,
         )
         return None
 
     try:
-        # The LangGraph API takes a base64-encoded key directly.
-        return EncryptedSerializer.from_pycryptodome_aes(key)
-    except (AttributeError, ValueError) as exc:
+        decoded_key = base64.urlsafe_b64decode(key)
+        if len(decoded_key) != 32:
+            raise ValueError(f"{ENCRYPTION_KEY_ENV} must decode to 32 bytes")
+        if serde is not None:
+            return EncryptedSerializer.from_pycryptodome_aes(serde=serde, key=decoded_key)
+        return EncryptedSerializer.from_pycryptodome_aes(key=decoded_key)
+    except (AttributeError, binascii.Error, ImportError, ValueError) as exc:
         logger.warning("Failed to build EncryptedSerializer: %s", exc)
         return None

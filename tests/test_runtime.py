@@ -195,6 +195,20 @@ def test_get_encrypted_serializer_handles_missing_optional_dep(monkeypatch):
     assert encryption.get_encrypted_serializer() is None
 
 
+def test_get_encrypted_serializer_round_trips(monkeypatch):
+    """A configured base64 key encrypts and decrypts checkpoint payloads."""
+    import base64
+
+    from market_analyst.memory import encryption
+
+    monkeypatch.setenv(encryption.ENCRYPTION_KEY_ENV, base64.urlsafe_b64encode(b"x" * 32).decode())
+    serializer = encryption.get_encrypted_serializer()
+
+    assert serializer is not None
+    payload = serializer.dumps_typed({"secret": "value"})
+    assert serializer.loads_typed(payload) == {"secret": "value"}
+
+
 # --- Evaluator subagent -----------------------------------------------------
 
 

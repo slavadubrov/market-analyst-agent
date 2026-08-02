@@ -5,14 +5,13 @@ Classifies user requests to route between:
 - FLASH_BRIEFING: ReWOO (fast, token-efficient snapshot)
 """
 
-import os
+from typing import cast
 
-from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel, Field
 
-from market_analyst.constants import DEFAULT_MODEL, MODEL_ENV_VAR
+from market_analyst.llm import get_structured_model
 from market_analyst.nodes._telemetry import node_callbacks
 from market_analyst.schemas import AgentState, ExecutionMode, ResearchData
 
@@ -63,7 +62,7 @@ def router_node(state: AgentState, config: RunnableConfig | None = None) -> dict
         user_messages = [m for m in state.messages if isinstance(m, HumanMessage)]
         if not user_messages:
             user_messages = [m for m in state.messages if hasattr(m, "type") and m.type == "human"]
-        query = user_messages[-1].content if user_messages else ""
+        query = str(user_messages[-1].content) if user_messages else ""
 
         # Simple ticker extraction (look for uppercase 1-5 letter words)
         import re
@@ -76,20 +75,14 @@ def router_node(state: AgentState, config: RunnableConfig | None = None) -> dict
             "research_data": ResearchData(ticker=ticker),
         }
 
-    model_name = os.getenv(MODEL_ENV_VAR, DEFAULT_MODEL)
-    llm = ChatAnthropic(
-        model=model_name,
-        temperature=0,
-    )
-
-    structured_llm = llm.with_structured_output(RouterOutput)
+    structured_llm = get_structured_model(RouterOutput)
 
     # Get the user's query
     user_messages = [m for m in state.messages if isinstance(m, HumanMessage)]
     if not user_messages:
         user_messages = [m for m in state.messages if hasattr(m, "type") and m.type == "human"]
 
-    query = user_messages[-1].content if user_messages else "Analyze the market"
+    query = str(user_messages[-1].content) if user_messages else "Analyze the market"
 
     messages = [
         SystemMessage(content=ROUTER_SYSTEM_PROMPT),
@@ -97,9 +90,12 @@ def router_node(state: AgentState, config: RunnableConfig | None = None) -> dict
     ]
 
     try:
-        result: RouterOutput = structured_llm.invoke(
-            messages,
-            config={"callbacks": node_callbacks(node_name="router", config=config)},
+        result = cast(
+            RouterOutput,
+            structured_llm.invoke(
+                messages,
+                config={"callbacks": node_callbacks(node_name="router", config=config)},
+            ),
         )
 
         mode_emoji = "⚡" if result.mode == ExecutionMode.FLASH_BRIEFING else "🔬"

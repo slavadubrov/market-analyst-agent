@@ -5,14 +5,11 @@ This creates the classic Thought-Action-Observation loop, but guided by the
 pre-generated plan (combining Plan-and-Execute with ReAct).
 """
 
-import os
-
-from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.prebuilt import create_react_agent
 
-from market_analyst.constants import DEFAULT_MODEL, MODEL_ENV_VAR
+from market_analyst.llm import get_chat_model
 from market_analyst.nodes._telemetry import node_callbacks
 from market_analyst.schemas import AgentState, PlanStep
 from market_analyst.tools.cli_tools import cli_list_reports, cli_show_report
@@ -130,8 +127,7 @@ def executor_node(state: AgentState, config: RunnableConfig | None = None) -> di
     current_step = state.plan[state.current_step_index]
     previous_context = _build_previous_context(state.plan, state.current_step_index)
 
-    model_name = os.getenv(MODEL_ENV_VAR, DEFAULT_MODEL)
-    llm = ChatAnthropic(model=model_name, temperature=0)
+    llm = get_chat_model()
     react_agent = create_react_agent(model=llm, tools=TOOLS)
 
     ticker = state.research_data.ticker if state.research_data else "UNKNOWN"
@@ -159,7 +155,7 @@ Complete this step and summarize your findings concisely."""
         )
 
         final_message = result["messages"][-1]
-        step_result = final_message.content if hasattr(final_message, "content") else str(final_message)
+        step_result = str(final_message.text)
         updated_plan = _create_updated_plan(state, current_step, step_result)
         research_data = _update_research_data(state, result, current_step, step_result)
 

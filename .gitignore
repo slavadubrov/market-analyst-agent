@@ -31,6 +31,8 @@ ENV/
 # local directories
 tmp/
 reports/
+workspaces/
+.idempotency/
 
 # Environment files
 .env
@@ -44,6 +46,3 @@ reports/
 # OS
 .DS_Store
 Thumbs.db
-
-# uv
-uv.lock

@@ -6,6 +6,7 @@ offering similar functionality to the CLI but in a browser-based environment.
 
 import os
 import uuid
+from typing import Any
 
 import gradio as gr
 from dotenv import load_dotenv
@@ -13,7 +14,7 @@ from dotenv import load_dotenv
 from market_analyst.constants import DEFAULT_MODEL_KEY, MODEL_ENV_VAR, MODEL_MAP
 from market_analyst.memory import get_checkpointer, get_long_term_memory
 from market_analyst.nodes.reporter import format_report_for_display
-from market_analyst.schemas import ExecutionMode
+from market_analyst.schemas import DraftReport, ExecutionMode, UserProfile
 from market_analyst.utils import get_state_attr
 from market_analyst.workflows.analysis_workflow import (
     approve_and_publish,
@@ -21,6 +22,7 @@ from market_analyst.workflows.analysis_workflow import (
 )
 from market_analyst.workflows.combined_workflow import (
     approve_combined_report,
+    approve_combined_trade,
     run_combined_analysis,
 )
 from market_analyst.workflows.trade_workflow import approve_trade, run_trade
@@ -44,10 +46,12 @@ def set_profile(user_id: str, risk_tolerance: str | None, horizon: str | None) -
         store = get_long_term_memory()
         profile = store.get_profile(user_id)
 
+        updates = profile.model_dump()
         if risk_tolerance:
-            profile.risk_tolerance = risk_tolerance
+            updates["risk_tolerance"] = risk_tolerance
         if horizon:
-            profile.investment_horizon = horizon
+            updates["investment_horizon"] = horizon
+        profile = UserProfile.model_validate(updates)
 
         store.save_profile(user_id, profile)
         return f"✅ Profile updated for user: {user_id}\nRisk Tolerance: {profile.risk_tolerance}\nInvestment Horizon: {profile.investment_horizon}"
@@ -55,7 +59,7 @@ def set_profile(user_id: str, risk_tolerance: str | None, horizon: str | None) -
         return f"⚠️ Could not save to Qdrant: {str(e)}"
 
 
-def format_report_markdown(report: dict | None) -> str:
+def format_report_markdown(report: DraftReport | dict[str, Any] | None) -> str:
     """Format report for Markdown display.
 
     Args:
@@ -66,7 +70,7 @@ def format_report_markdown(report: dict | None) -> str:
     """
     if not report:
         return "No report available."
-    return format_report_for_display(report)
+    return format_report_for_display(report if isinstance(report, DraftReport) else DraftReport.model_validate(report))
 
 
 def run_analysis_ui(
@@ -229,6 +233,24 @@ def approve_trade_ui(thread_id, decision, modified_amount):
         return f"❌ Error: {str(e)}"
 
 
+def approve_combined_trade_ui(thread_id, decision, modified_amount):
+    """Approve or reject a trade paused inside the combined workflow."""
+    if not thread_id:
+        return "❌ Error: No Thread ID."
+    try:
+        result = approve_combined_trade(
+            thread_id=thread_id,
+            checkpointer=get_checkpointer(),
+            approve=decision == "Approve",
+            modified_amount=float(modified_amount) if modified_amount is not None else None,
+        )
+        if result.get("rejected"):
+            return "❌ Trade rejected by reviewer"
+        return "🎉 Trade approved and executed!" if result.get("executed") else "⚠️ Trade could not be processed"
+    except Exception as e:
+        return f"❌ Error: {str(e)}"
+
+
 def _parse_force_mode(mode):
     """Map mode string to ExecutionMode enum."""
     if mode == "deep":
@@ -246,7 +268,7 @@ def _handle_combined_result(result, status_log, thread_id):
         status_log += "\n⏸️ PAUSED - Awaiting report approval"
         if result.get("draft_report"):
             report_md = format_report_for_display(result["draft_report"])
-        return status_log, report_md, thread_id, gr.update(visible=True), gr.update(visible=False)
+        return status_log, report_md, thread_id, gr.update(visible=True), "", gr.update(visible=False)
 
     if result.get("requires_trade_approval"):
         status_log += "\n⏸️ TRADE PAUSED - Awaiting trade approval"
@@ -254,11 +276,11 @@ def _handle_combined_result(result, status_log, thread_id):
         trade_status = ""
         if guardian_result:
             trade_status = f"Policy: {guardian_result.policy_name}\nReason: {guardian_result.reason}"
-        return status_log, report_md, thread_id, gr.update(visible=False), gr.update(visible=True, value=trade_status)
+        return status_log, report_md, thread_id, gr.update(visible=False), trade_status, gr.update(visible=True)
 
     if result.get("trade_executed"):
         status_log += "\n🎉 Combined workflow complete!\n✅ Report published\n✅ Trade executed"
-        return status_log, report_md, thread_id, gr.update(visible=False), gr.update(visible=False)
+        return status_log, report_md, thread_id, gr.update(visible=False), "", gr.update(visible=False)
 
     guardian_result = result.get("guardian_result")
     if guardian_result and guardian_result.decision.value == "reject":
@@ -269,7 +291,7 @@ def _handle_combined_result(result, status_log, thread_id):
     if result.get("draft_report"):
         report_md = format_report_for_display(result["draft_report"])
 
-    return status_log, report_md, thread_id, gr.update(visible=False), gr.update(visible=False)
+    return status_log, report_md, thread_id, gr.update(visible=False), "", gr.update(visible=False)
 
 
 def run_combined_ui(query, user_id, model, mode, trade_amount):
@@ -297,7 +319,7 @@ def run_combined_ui(query, user_id, model, mode, trade_amount):
         return _handle_combined_result(result, status_log, thread_id)
 
     except Exception as e:
-        return f"❌ Error: {str(e)}", "", thread_id, gr.update(visible=False), gr.update(visible=False)
+        return f"❌ Error: {str(e)}", "", thread_id, gr.update(visible=False), "", gr.update(visible=False)
 
 
 def approve_combined_report_ui(thread_id):
@@ -319,7 +341,7 @@ def approve_combined_report_ui(thread_id):
             guardian_result = result.get("guardian_result")
             if guardian_result:
                 trade_info = f"Policy: {guardian_result.policy_name}\nReason: {guardian_result.reason}"
-            trade_vis = gr.update(visible=True, value=trade_info)
+            trade_vis = gr.update(visible=True)
 
         elif result.get("trade_executed"):
             status_update += "\n🎉 Combined workflow complete!\n✅ Trade executed"
@@ -331,10 +353,10 @@ def approve_combined_report_ui(thread_id):
             else:
                 status_update += "\n✅ Analysis complete (no trade action)"
 
-        return status_update, trade_vis
+        return status_update, trade_info, trade_vis
 
     except Exception as e:
-        return f"❌ Error: {str(e)}", gr.update(visible=False)
+        return f"❌ Error: {str(e)}", "", gr.update(visible=False)
 
 
 # Build the Interface
@@ -444,13 +466,17 @@ with gr.Blocks(title="Market Analyst Agent") as demo:
             c_run_btn.click(
                 run_combined_ui,
                 inputs=[c_query, c_user_id, c_model, c_mode, c_trade_amt],
-                outputs=[c_status, c_report, c_thread_id, c_report_approve_group, c_trade_approve_group],
+                outputs=[c_status, c_report, c_thread_id, c_report_approve_group, c_trade_info, c_trade_approve_group],
             )
 
-            c_approve_report_btn.click(approve_combined_report_ui, inputs=[c_thread_id], outputs=[c_status, c_trade_approve_group])
+            c_approve_report_btn.click(
+                approve_combined_report_ui,
+                inputs=[c_thread_id],
+                outputs=[c_status, c_trade_info, c_trade_approve_group],
+            )
 
             c_submit_trade_btn.click(
-                approve_trade_ui,
+                approve_combined_trade_ui,
                 inputs=[c_thread_id, c_trade_decision, c_trade_mod],
                 outputs=[c_status],  # Reusing status box for result
             )

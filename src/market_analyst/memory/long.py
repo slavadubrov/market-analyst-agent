@@ -60,7 +60,7 @@ class LongTermMemory:
 
         points, _ = results
         if points:
-            payload = points[0].payload
+            payload = points[0].payload or {}
             # Reconstruction of UserProfile from payload
             # We filter out internal keys if any
             profile_data = {k: v for k, v in payload.items() if k != "user_id"}
@@ -117,11 +117,11 @@ class LongTermMemory:
 
     def search_profiles(self, query_vector: list[float], limit: int = 5) -> list[UserProfile]:
         """Search profiles by vector similarity."""
-        results = self.client.search(
+        results = self.client.query_points(
             collection_name=self.collection_name,
-            query_vector=query_vector,
+            query=query_vector,
             limit=limit,
-        )
+        ).points
 
         profiles = []
         for point in results:
@@ -140,8 +140,10 @@ def get_long_term_memory() -> LongTermMemory:
 # Convenience functions for backward compatibility or easy access
 def load_user_profile(user_id: str) -> UserProfile:
     """Load a user's profile."""
-    memory = get_long_term_memory()
-    return memory.get_profile(user_id)
+    try:
+        return get_long_term_memory().get_profile(user_id)
+    except Exception:
+        return UserProfile()
 
 
 def save_user_profile(user_id: str, profile: UserProfile) -> bool:

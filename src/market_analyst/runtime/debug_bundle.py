@@ -50,18 +50,12 @@ def _safe_dump(payload: Any) -> str:
 
 
 def _write_last_state(debug_dir: Path, state: Mapping[str, Any] | Any) -> None:
-    state_payload = (
-        state.model_dump() if hasattr(state, "model_dump")
-        else dict(state) if isinstance(state, Mapping)
-        else {"value": _serialize(state)}
-    )
+    state_payload = state.model_dump() if hasattr(state, "model_dump") else dict(state) if isinstance(state, Mapping) else {"value": _serialize(state)}
     (debug_dir / "last_state.json").write_text(_safe_dump(state_payload))
 
 
 def _write_error(debug_dir: Path, exception: BaseException) -> None:
-    formatted = "".join(
-        traceback.format_exception(type(exception), exception, exception.__traceback__)
-    )
+    formatted = "".join(traceback.format_exception(type(exception), exception, exception.__traceback__))
     (debug_dir / "error.txt").write_text(formatted)
 
 
@@ -73,9 +67,7 @@ def _write_tool_calls_csv(debug_dir: Path, tool_calls: list[dict[str, Any]]) -> 
     (debug_dir / "tool_calls.csv").write_text("\n".join(lines) + "\n")
 
 
-def _write_env(
-    debug_dir: Path, thread_id: str, extra_env: Mapping[str, str] | None
-) -> None:
+def _write_env(debug_dir: Path, thread_id: str, extra_env: Mapping[str, str] | None) -> None:
     env_lines = [
         f"python_version={sys.version.split()[0]}",
         f"platform={platform.platform()}",

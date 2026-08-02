@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Callable
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -44,42 +45,38 @@ def _tool_get_stock_snapshot(ticker: str) -> str:
     from market_analyst.tools.stock import get_stock_snapshot
 
     result = get_stock_snapshot.invoke({"ticker": ticker})
-    return result.model_dump_json()
+    return str(result.model_dump_json())
 
 
 def _tool_get_price_history(ticker: str, period: str = "1mo") -> str:
     from market_analyst.tools.stock import get_price_history
 
     result = get_price_history.invoke({"ticker": ticker, "period": period})
-    return result.model_dump_json()
+    return str(result.model_dump_json())
 
 
 def _tool_get_financials(ticker: str, statement_type: str = "income") -> str:
     from market_analyst.tools.stock import get_financials
 
-    result = get_financials.invoke(
-        {"ticker": ticker, "statement_type": statement_type}
-    )
-    return result.model_dump_json()
+    result = get_financials.invoke({"ticker": ticker, "statement_type": statement_type})
+    return str(result.model_dump_json())
 
 
 def _tool_search_news(query: str, max_results: int = 5) -> str:
     from market_analyst.tools.search import search_news
 
     result = search_news.invoke({"query": query, "max_results": max_results})
-    return result.model_dump_json()
+    return str(result.model_dump_json())
 
 
 def _tool_search_competitors(ticker: str, max_results: int = 3) -> str:
     from market_analyst.tools.search import search_competitors
 
-    result = search_competitors.invoke(
-        {"ticker": ticker, "max_results": max_results}
-    )
-    return result.model_dump_json()
+    result = search_competitors.invoke({"ticker": ticker, "max_results": max_results})
+    return str(result.model_dump_json())
 
 
-TOOL_TABLE: dict[str, Any] = {
+TOOL_TABLE: dict[str, Callable[..., str]] = {
     "get_stock_snapshot": _tool_get_stock_snapshot,
     "get_price_history": _tool_get_price_history,
     "get_financials": _tool_get_financials,

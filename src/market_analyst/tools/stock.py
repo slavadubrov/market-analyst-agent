@@ -13,6 +13,8 @@ from langchain_core.tools import tool
 from pydantic import BaseModel, Field, field_validator
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
+from market_analyst.utils import normalize_ticker
+
 # ---------------------------------------------------------------------------
 # Input validation models (ACI guardrails — catch errors before API calls)
 # ---------------------------------------------------------------------------
@@ -30,10 +32,7 @@ class StockQuery(BaseModel):
     @field_validator("ticker")
     @classmethod
     def validate_ticker(cls, v: str) -> str:
-        v = v.upper().strip()
-        if not v.isalpha() or len(v) > 5:
-            raise ValueError(f"Invalid ticker format: {v}")
-        return v
+        return normalize_ticker(v)
 
 
 class StockHistoryQuery(StockQuery):
@@ -255,7 +254,7 @@ _KEY_ROWS = {
 }
 
 
-def _extract_statement_data(df, stype: str, prefix: str, all_data: dict, all_periods: set) -> None:
+def _extract_statement_data(df, stype: str, prefix: bool, all_data: dict, all_periods: set) -> None:
     """Extract key rows from a financial statement DataFrame."""
     if df is None or df.empty:
         return

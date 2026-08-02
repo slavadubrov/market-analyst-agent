@@ -22,17 +22,15 @@ isn't a clear ``pass`` should default to ``needs_human`` so the HITL gate
 stays meaningful.
 """
 
-from __future__ import annotations
-
 import os
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
-from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel, Field
 
 from market_analyst.constants import DEFAULT_MODEL, MODEL_ENV_VAR
+from market_analyst.llm import get_structured_model
 from market_analyst.nodes._telemetry import node_callbacks
 from market_analyst.schemas import AgentState, DraftReport
 
@@ -61,9 +59,7 @@ Return your verdict, with one short sentence per reason.
 class EvaluatorVerdict(BaseModel):
     """Structured output for the evaluator subagent."""
 
-    verdict: Literal["pass", "fail", "needs_human"] = Field(
-        description="The evaluator's decision. Default to fail or needs_human when in doubt."
-    )
+    verdict: Literal["pass", "fail", "needs_human"] = Field(description="The evaluator's decision. Default to fail or needs_human when in doubt.")
     reasons: list[str] = Field(
         description="One-line reasons backing the verdict (1-4 items).",
         max_length=4,
@@ -108,26 +104,27 @@ def evaluate_draft_report(
         ``needs_human`` to a HITL interrupt; ``pass`` clears the gate.
     """
     model = model_name or os.getenv(MODEL_ENV_VAR, DEFAULT_MODEL)
-    llm = ChatAnthropic(model=model, temperature=0)
-    structured = llm.with_structured_output(EvaluatorVerdict)
+    structured = get_structured_model(EvaluatorVerdict, model_name=model)
 
-    return structured.invoke(
-        [
-            SystemMessage(content=EVALUATOR_SYSTEM_PROMPT),
-            HumanMessage(content=_build_evaluator_input(report)),
-        ],
-        config={
-            "callbacks": node_callbacks(
-                node_name="evaluator",
-                config={"configurable": {"thread_id": conversation_id}} if conversation_id else None,
-            )
-        },
+    callback_config: RunnableConfig = {
+        "callbacks": node_callbacks(
+            node_name="evaluator",
+            config={"configurable": {"thread_id": conversation_id}} if conversation_id else None,
+        )
+    }
+    return cast(
+        EvaluatorVerdict,
+        structured.invoke(
+            [
+                SystemMessage(content=EVALUATOR_SYSTEM_PROMPT),
+                HumanMessage(content=_build_evaluator_input(report)),
+            ],
+            config=callback_config,
+        ),
     )
 
 
-def evaluator_node(
-    state: AgentState, config: RunnableConfig | None = None
-) -> dict[str, Any]:
+def evaluator_node(state: AgentState, config: RunnableConfig | None = None) -> dict[str, Any]:
     """LangGraph-compatible node form of the evaluator.
 
     Returns:

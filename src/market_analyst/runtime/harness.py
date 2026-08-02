@@ -86,8 +86,7 @@ def harness_run(thread_id: str, *, workflow_name: str | None = None) -> Iterator
     if initializer.is_resume():
         write_progress(
             workspace,
-            line=f"RESUMED at {datetime.now(timezone.utc).isoformat()} "
-            f"(prior progress lines: {initializer.progress.count(chr(10))})",
+            line=f"RESUMED at {datetime.now(timezone.utc).isoformat()} (prior progress lines: {initializer.progress.count(chr(10))})",
         )
     else:
         write_progress(

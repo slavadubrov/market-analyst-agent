@@ -5,14 +5,13 @@ This adheres to the Plan-and-Execute pattern, where high-level steps are
 generated first, and then executed by a ReAct agent.
 """
 
-import os
+from typing import cast
 
-from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel, Field
 
-from market_analyst.constants import DEFAULT_MODEL, MODEL_ENV_VAR
+from market_analyst.llm import get_structured_model
 from market_analyst.nodes._telemetry import node_callbacks
 from market_analyst.schemas import AgentState, PlanStep, ResearchData
 
@@ -57,14 +56,7 @@ def planner_node(state: AgentState, config: RunnableConfig | None = None) -> dic
     Returns:
         Updated state with plan and research_data initialized
     """
-    model_name = os.getenv(MODEL_ENV_VAR, DEFAULT_MODEL)
-    llm = ChatAnthropic(
-        model=model_name,
-        temperature=0,
-    )
-
-    # Get structured output
-    structured_llm = llm.with_structured_output(PlanOutput)
+    structured_llm = get_structured_model(PlanOutput)
 
     # Get the last user message
     user_messages = [m for m in state.messages if hasattr(m, "type") and m.type == "human"]
@@ -93,9 +85,12 @@ Consider this profile when planning the analysis."""
     ]
 
     try:
-        result: PlanOutput = structured_llm.invoke(
-            messages,
-            config={"callbacks": node_callbacks(node_name="planner", config=config)},
+        result = cast(
+            PlanOutput,
+            structured_llm.invoke(
+                messages,
+                config={"callbacks": node_callbacks(node_name="planner", config=config)},
+            ),
         )
 
         print(f"\n📋 Research plan created with {len(result.steps)} steps:")

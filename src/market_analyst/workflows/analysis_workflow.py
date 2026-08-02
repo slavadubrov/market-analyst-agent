@@ -14,8 +14,10 @@ from pathlib import Path
 from typing import Literal
 
 from langchain_core.messages import HumanMessage
-from langgraph.checkpoint.postgres import PostgresSaver
+from langchain_core.runnables import RunnableConfig
+from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, START, StateGraph
+from langgraph.graph.state import CompiledStateGraph
 
 from market_analyst.memory import (
     DocumentMetadata,
@@ -30,7 +32,7 @@ from market_analyst.nodes.rewoo_solver import rewoo_solver_node
 from market_analyst.nodes.rewoo_worker import rewoo_worker_node
 from market_analyst.nodes.router import router_node
 from market_analyst.runtime.evaluator import evaluator_node
-from market_analyst.schemas import AgentState, ExecutionMode
+from market_analyst.schemas import AgentState, DraftReport, ExecutionMode
 
 
 def route_after_router(state: AgentState) -> Literal["planner", "rewoo_planner"]:
@@ -57,8 +59,9 @@ def route_after_executor(state: AgentState) -> Literal["executor", "reporter"]:
 
 
 def create_graph(
-    checkpointer: PostgresSaver | None = None,
-) -> StateGraph:
+    checkpointer: BaseCheckpointSaver | None = None,
+    force_mode: ExecutionMode | None = None,
+) -> CompiledStateGraph:
     """Create the Market Analyst Agent graph.
 
     Graph Structure:
@@ -236,7 +239,7 @@ def run_analysis(
     query: str,
     user_id: str = "default",
     thread_id: str | None = None,
-    checkpointer: PostgresSaver | None = None,
+    checkpointer: BaseCheckpointSaver | None = None,
     force_mode: ExecutionMode | None = None,
 ) -> dict:
     """Run a complete stock analysis.
@@ -269,23 +272,25 @@ def run_analysis(
 
     # Configure thread
     thread_id = thread_id or str(uuid.uuid4())
-    config = {"configurable": {"thread_id": thread_id}}
+    config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
 
     # Run the graph (will pause at publish node for approval)
     result = graph.invoke(initial_state, config)
+    if error := result.get("error"):
+        raise RuntimeError(error)
 
     return {
         "thread_id": thread_id,
         "state": result,
         "draft_report": result.get("draft_report"),
         "execution_mode": result.get("execution_mode"),
-        "requires_approval": not result.get("report_approved", False),
+        "requires_approval": checkpointer is not None and not result.get("report_approved", False),
     }
 
 
 def approve_and_publish(
     thread_id: str,
-    checkpointer: PostgresSaver,
+    checkpointer: BaseCheckpointSaver,
     edits: dict | None = None,
 ) -> dict:
     """Approve the draft report and continue to publish.
@@ -304,7 +309,7 @@ def approve_and_publish(
         Final state after publishing
     """
     graph = create_graph(checkpointer=checkpointer)
-    config = {"configurable": {"thread_id": thread_id}}
+    config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
 
     # Get current state
     current_state = graph.get_state(config)
@@ -315,24 +320,25 @@ def approve_and_publish(
     # Check if we're at the right interrupt point
     next_nodes = current_state.next
     if not next_nodes:
-        # Already completed or no pending nodes
-        print("   ⚠️  Analysis already completed or not at interrupt point")
+        if not current_state.values.get("report_approved"):
+            raise ValueError("Analysis is not awaiting report approval")
         return {
             "thread_id": thread_id,
             "state": current_state.values,
             "published": True,
         }
+    if "publish" not in next_nodes:
+        raise ValueError("Analysis is not awaiting report approval")
 
     print(f"   📍 Resuming from interrupt (next: {next_nodes})")
 
     # Apply edits if provided
-    update_values = {"report_approved": True}
+    update_values: dict[str, object] = {"report_approved": True}
 
     if edits and current_state.values.get("draft_report"):
-        draft = current_state.values["draft_report"]
-        for key, value in edits.items():
-            if hasattr(draft, key):
-                setattr(draft, key, value)
+        draft = DraftReport.model_validate(current_state.values["draft_report"])
+        allowed_edits = {key: value for key, value in edits.items() if key in DraftReport.model_fields}
+        draft = DraftReport.model_validate({**draft.model_dump(), **allowed_edits})
         update_values["draft_report"] = draft
 
     # Update state and resume
