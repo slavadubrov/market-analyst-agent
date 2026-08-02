@@ -2,19 +2,20 @@
 
 > **DISCLAIMER**: This is a **demo project for educational purposes only**, created for the **["Engineering the Agentic Stack"](https://slavadubrov.github.io/blog/#engineering-the-agentic-stack)** article series. Do NOT use this for actual trading or investment decisions. The trading functionality is **simulated** (no real trades are executed) and the analysis should not be considered financial advice.
 
-An **Autonomous Investment Research Agent** demonstrating production-ready agentic patterns. This repo serves as a hands-on companion to the blog series, showcasing multiple **reasoning loops**, **memory tiers**, and **tool modalities** in a realistic market research context.
+An **Autonomous Investment Research Agent** demonstrating production-ready agentic patterns. This repo is the hands-on companion to the six-part blog series, covering **reasoning loops**, **memory**, **tool use**, **security**, **runtime**, and **harness engineering** in a realistic market research context.
 
 ## What This Project Demonstrates
 
-This project implements the full agentic stack across three dimensions:
+This project implements the six layers covered by the series:
 
 | Dimension | What's Implemented | Article |
 |-----------|-------------------|---------|
-| **Reasoning** | ReAct, ReWOO, Plan-and-Execute, Router | [Part 1: The Cognitive Engine](https://slavadubrov.github.io/blog/2026/01/31/the-cognitive-engine-choosing-the-right-reasoning-loop/) |
-| **Memory** | Hot (PostgreSQL), Cold (Qdrant), Document (file-based) | [Part 2: The Cortex](https://slavadubrov.github.io/blog/2026/02/14/the-cortex--architecting-memory-for-ai-agents/) |
-| **Tools** | JSON Tool Calling, Skills, CLI-as-Tool, Code Execution | [Part 3: The Hands](https://slavadubrov.github.io/blog/2026/03/24/the-hands--tool-ergonomics-and-the-agent-computer-interface/) |
-| **Safety** | Guardian pattern, HITL escalation, policy automation | [Part 4: The Guardians](https://slavadubrov.github.io/blog/2026/04/20/the-guardians--why-agent-security-is-not-llm-safety/) |
-| **Habitat** | OTel + GenAI conventions, MCP sidecar, idempotency, evaluator, queue+worker, debug bundles | [Part 5: The Habitat](https://slavadubrov.github.io/blog/2026/05/22/the-habitat-running-agents-for-hours-not-seconds/) |
+| **Reasoning loops** | ReAct, ReWOO, Plan-and-Execute, Router | [Part 1: AI Agent Reasoning Loops: ReAct, ReWOO, Plan-and-Execute](https://slavadubrov.github.io/blog/2026/01/31/ai-agent-reasoning-loops/) |
+| **Memory** | Hot (PostgreSQL), Cold (Qdrant), Document (file-based) | [Part 2: AI Agent Memory Architecture: Checkpoints and Vector Stores](https://slavadubrov.github.io/blog/2026/02/14/ai-agent-memory-architecture/) |
+| **Tool use** | JSON Tool Calling, MCP, Skills, CLI-as-Tool, Code Execution | [Part 3: AI Agent Tool Use: MCP, CLI, Skills, and Code Execution](https://slavadubrov.github.io/blog/2026/03/24/ai-agent-tool-use/) |
+| **Security** | Policy checks, HITL escalation, sandboxing, scoped credentials | [Part 4: AI Agent Security: Permissions, Sandboxes, and MCP Threats](https://slavadubrov.github.io/blog/2026/04/20/ai-agent-security/) |
+| **Runtime** | Sessions, sandboxes, checkpoints, traces, queue + worker | [Part 5: Long-Running AI Agent Runtime: Sessions and Checkpoints](https://slavadubrov.github.io/blog/2026/05/26/ai-agent-runtime/) |
+| **Harness** | Run lifecycle, progress handoffs, replay protection, acceptance checks | [Part 6: Harness Engineering for AI Agents: Designing Control Loops](https://slavadubrov.github.io/blog/2026/07/22/ai-agent-harness-engineering/) |
 
 ---
 
@@ -54,14 +55,15 @@ memory/documents/
 
 ### Tool Modalities (Part 3)
 
-The agent demonstrates **four distinct tool modalities**, following [ACI (Agent-Computer Interface)](https://arxiv.org/abs/2405.15793) design principles:
+The agent demonstrates **five tool interface patterns**, following [ACI (Agent-Computer Interface)](https://arxiv.org/abs/2405.15793) design principles:
 
 | # | Modality | Implementation | Tools | Token Overhead |
 |---|----------|---------------|-------|---------------|
 | 1 | **JSON Tool Calling** | `@tool` + Pydantic schemas | `get_stock_snapshot`, `get_price_history`, `get_financials`, `search_news`, `search_competitors` | ~4,500 tokens (5 tool schemas) |
-| 2 | **Skills (SKILL.md)** | Markdown files with YAML frontmatter | `use_skill` -> `earnings_analysis`, `sector_comparison` playbooks | ~100 tokens (metadata only at startup) |
-| 3 | **CLI-as-Tool** | Subprocess wrapper around own CLI | `cli_list_reports`, `cli_show_report` (agent calls `market-analyst --json`) | Near zero (no schema) |
-| 4 | **Code Execution (PTC)** | `PythonAstREPLTool` with safety guards | `execute_python_analysis` for ratio calculations, CAGR, portfolio math | ~200 tokens (1 tool schema) |
+| 2 | **MCP** | Sidecar exposing a curated tool surface | Market-data and search tools in `mcp_server/` | Varies with exposed schemas |
+| 3 | **Skills (SKILL.md)** | Markdown files with YAML frontmatter | `use_skill` -> `earnings_analysis`, `sector_comparison` playbooks | ~100 tokens (metadata only at startup) |
+| 4 | **CLI-as-Tool** | Subprocess wrapper around own CLI | `cli_list_reports`, `cli_show_report` (agent calls `market-analyst --json`) | Near zero (no schema) |
+| 5 | **Code Execution (PTC)** | `PythonAstREPLTool` with safety guards | `execute_python_analysis` for ratio calculations, CAGR, portfolio math | ~200 tokens (1 tool schema) |
 
 **ACI Design Principles Applied:**
 - **Tool consolidation**: 10+ granular tools -> 5 high-level tools (62% schema reduction)
@@ -306,11 +308,12 @@ skills/
 
 | Article | Concepts | Demo Implementation |
 |---------|----------|---------------------|
-| [**Part 1: The Cognitive Engine**](https://slavadubrov.github.io/blog/2026/01/31/the-cognitive-engine-choosing-the-right-reasoning-loop/) | Reasoning loops: ReAct vs ReWOO vs Plan-and-Execute | `router.py` -> `planner.py` + `executor.py` (ReAct) or `rewoo_*.py` (ReWOO) |
-| [**Part 2: The Cortex**](https://slavadubrov.github.io/blog/2026/02/14/the-cortex--architecting-memory-for-ai-agents/) | Three-tier memory, checkpointing, retention policies | PostgreSQL (hot), Qdrant (cold), DocumentMemory (file-based) |
-| [**Part 3: The Hands**](https://slavadubrov.github.io/blog/2026/03/24/the-hands--tool-ergonomics-and-the-agent-computer-interface/) | ACI design, 4 tool modalities, Pydantic validation | `tools/` — JSON, Skills, CLI-as-Tool, Code Execution |
-| [**Part 4: The Guardians**](https://slavadubrov.github.io/blog/2026/04/20/the-guardians--why-agent-security-is-not-llm-safety/) | Guardian pattern, HITL escalation, policy automation | `guardian.py` + `trade_workflow.py` |
-| [**Part 5: The Habitat**](https://slavadubrov.github.io/blog/2026/05/22/the-habitat-running-agents-for-hours-not-seconds/) | Session/harness/sandbox/checkpoint/trace primitives; OTel + GenAI conventions; idempotency; debug bundles; queue+worker shape; MCP sidecar | `observability/`, `runtime/`, `mcp_server/`, `docker/observability/`, queue worker (`runtime/worker.py`) |
+| [**Part 1: AI Agent Reasoning Loops: ReAct, ReWOO, Plan-and-Execute**](https://slavadubrov.github.io/blog/2026/01/31/ai-agent-reasoning-loops/) | ReAct vs ReWOO vs Plan-and-Execute | `router.py` -> `planner.py` + `executor.py` (ReAct) or `rewoo_*.py` (ReWOO) |
+| [**Part 2: AI Agent Memory Architecture: Checkpoints and Vector Stores**](https://slavadubrov.github.io/blog/2026/02/14/ai-agent-memory-architecture/) | Checkpoints, vector stores, and file-based memory | PostgreSQL (hot), Qdrant (cold), DocumentMemory (file-based) |
+| [**Part 3: AI Agent Tool Use: MCP, CLI, Skills, and Code Execution**](https://slavadubrov.github.io/blog/2026/03/24/ai-agent-tool-use/) | JSON tool calling, MCP, Skills, CLI, code execution, and ACI design | `tools/`, `skills/`, and `mcp_server/` |
+| [**Part 4: AI Agent Security: Permissions, Sandboxes, and MCP Threats**](https://slavadubrov.github.io/blog/2026/04/20/ai-agent-security/) | Permissions, policy checks, sandboxes, HITL, and MCP scoping | `guardian.py` + `trade_workflow.py` |
+| [**Part 5: Long-Running AI Agent Runtime: Sessions and Checkpoints**](https://slavadubrov.github.io/blog/2026/05/26/ai-agent-runtime/) | Sessions, sandboxes, checkpoints, traces, and deployment patterns | `observability/`, `runtime/`, `docker/observability/`, and `runtime/worker.py` |
+| [**Part 6: Harness Engineering for AI Agents: Designing Control Loops**](https://slavadubrov.github.io/blog/2026/07/22/ai-agent-harness-engineering/) | Context, tool dispatch, progress handoffs, replay protection, and acceptance checks | `runtime/harness.py`, `runtime/initializer.py`, `runtime/idempotency.py`, and `runtime/evaluator.py` |
 
 ---
 
@@ -332,13 +335,14 @@ skills/
 
 ---
 
-## Part 5: The Habitat — Runtime, Observability, Production-Hardening
+## Parts 5 and 6: Runtime and Harness Engineering
 
-Part 5 covers everything that lives *outside* the agent: durable sessions,
-crash-safe checkpoints, sandboxes, traces, and the production-grade plumbing
-that turns a 30-second request handler into a six-hour background worker.
+Part 5 covers the infrastructure under the agent loop: durable sessions,
+crash-safe checkpoints, sandboxes, traces, and replaceable workers. Part 6
+opens the harness that drives the loop, preserves progress, controls retries,
+and decides whether the result has enough evidence to count as complete.
 
-### The five primitives (article §"Five Primitives")
+### Runtime primitives (Part 5)
 
 | Primitive | Where it lives in this repo |
 |-----------|------------------------------|
@@ -348,7 +352,7 @@ that turns a 30-second request handler into a six-hour background worker.
 | **Checkpoint** | Same `PostgresSaver`, optionally wrapped with `EncryptedSerializer` |
 | **Trace** | OpenTelemetry GenAI spans emitted by `observability/langchain_callback.py` |
 
-### Failure mitigations (article §"Failure Modes the Runtime Has to Handle")
+### Runtime and harness safeguards
 
 | Failure mode | Where the mitigation lives |
 |--------------|----------------------------|
