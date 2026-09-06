@@ -5,22 +5,18 @@ This creates the classic Thought-Action-Observation loop, but guided by the
 pre-generated plan (combining Plan-and-Execute with ReAct).
 """
 
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain.agents import create_agent
+from langchain.agents.middleware import SummarizationMiddleware
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.runnables import RunnableConfig
-from langgraph.prebuilt import create_react_agent
 
-from market_analyst.llm import get_chat_model
+from market_analyst.llm import ModelSettings, get_chat_model
 from market_analyst.nodes._telemetry import node_callbacks
+from market_analyst.runtime.evidence import ToolEvidenceCollector
+from market_analyst.runtime.intervention import raise_if_intervention
 from market_analyst.schemas import AgentState, PlanStep
-from market_analyst.tools.cli_tools import cli_list_reports, cli_show_report
-from market_analyst.tools.code_exec import execute_python_analysis
-from market_analyst.tools.search import search_competitors, search_news
-from market_analyst.tools.skills import get_skill_descriptions, use_skill
-from market_analyst.tools.stock import (
-    get_financials,
-    get_price_history,
-    get_stock_snapshot,
-)
+from market_analyst.tools.registry import RESEARCH_TOOLS
+from market_analyst.tools.skills import get_skill_descriptions
 
 _SKILL_DESCRIPTIONS = get_skill_descriptions()
 
@@ -54,24 +50,6 @@ that would be tedious to do manually.
 - Use code execution for calculations on data you already have
 - Use CLI tools to reference past analyses
 - Be concise but comprehensive. Token efficiency matters."""
-
-
-# All available tools across modalities
-TOOLS = [
-    # JSON Tool Calling (modality 1)
-    get_stock_snapshot,
-    get_price_history,
-    get_financials,
-    search_news,
-    search_competitors,
-    # Skills (modality 2)
-    use_skill,
-    # CLI-as-Tool (modality 3)
-    cli_list_reports,
-    cli_show_report,
-    # Code Execution / PTC (modality 4)
-    execute_python_analysis,
-]
 
 
 def _build_previous_context(plan, current_step_index):
@@ -118,6 +96,8 @@ def executor_node(state: AgentState, config: RunnableConfig | None = None) -> di
     2. Uses a ReAct agent to execute it with tools
     3. Records the result and advances to the next step
     """
+    if state.error:
+        return {"error": state.error}
     if not state.plan:
         return {"error": "No plan to execute"}
 
@@ -127,8 +107,22 @@ def executor_node(state: AgentState, config: RunnableConfig | None = None) -> di
     current_step = state.plan[state.current_step_index]
     previous_context = _build_previous_context(state.plan, state.current_step_index)
 
-    llm = get_chat_model()
-    react_agent = create_react_agent(model=llm, tools=TOOLS)
+    config = {
+        **(config or {}),
+        "configurable": {**(config or {}).get("configurable", {}), **({"model_settings": state.model_settings} if state.model_settings else {})},
+    }
+    llm = get_chat_model(config=config)
+    settings = ModelSettings.model_validate(state.model_settings) if state.model_settings else ModelSettings.from_env()
+    collector = ToolEvidenceCollector()
+    compaction = SummarizationMiddleware(model=llm, trigger=("tokens", settings.context_tokens), keep=("messages", 6), trim_tokens_to_summarize=None)
+    # LangChain 1.4 retries all summary errors by default, including provider stops.
+    # Pinned adapter contract: one attempt; the worker owns the retry decision.
+    compaction._summary_model = llm
+    react_agent = create_agent(
+        model=llm,
+        tools=list((config or {}).get("configurable", {}).get("tools", RESEARCH_TOOLS)),
+        middleware=[compaction],
+    )
 
     ticker = state.research_data.ticker if state.research_data else "UNKNOWN"
     task_message = f"""Execute Step {current_step.step_number}: {current_step.description}
@@ -151,9 +145,12 @@ Complete this step and summarize your findings concisely."""
                     HumanMessage(content=task_message),
                 ]
             },
-            config={"callbacks": node_callbacks(node_name="executor", config=config)},
+            config={**(config or {}), "recursion_limit": 30, "callbacks": [*node_callbacks(node_name="executor", config=config), collector]},
         )
 
+        tool_messages = [msg for msg in result["messages"] if isinstance(msg, ToolMessage)]
+        if any(msg.status == "error" or str(msg.content).startswith(("Error", "Blocked")) for msg in tool_messages):
+            raise ValueError("Research tool failed; source evidence is incomplete")
         final_message = result["messages"][-1]
         step_result = str(final_message.text)
         updated_plan = _create_updated_plan(state, current_step, step_result)
@@ -163,12 +160,14 @@ Complete this step and summarize your findings concisely."""
 
         return {
             "plan": updated_plan,
+            "evidence": state.evidence + collector.records,
             "current_step_index": state.current_step_index + 1,
             "research_data": research_data,
             "messages": [AIMessage(content=f"Completed step {current_step.step_number}: {step_result[:200]}...")],
         }
 
     except Exception as e:
+        raise_if_intervention(e)
         print(f"\n❌ Step {current_step.step_number} failed: {str(e)}")
         updated_plan = _create_updated_plan(state, current_step, f"Error: {str(e)}")
 
@@ -187,7 +186,7 @@ def should_continue_executing(state: AgentState) -> str:
         "reporter" when all steps are complete
         "error" if there's a critical error
     """
-    if state.error and "critical" in state.error.lower():
+    if state.error:
         return "error"
 
     if state.current_step_index >= len(state.plan):

@@ -153,6 +153,8 @@ class AgentState(BaseModel):
     # ReWOO state (for FLASH_BRIEFING mode)
     rewoo_plan: list[ReWOOPlanStep] = Field(default_factory=list)
 
+    evidence: list[dict] = Field(default_factory=list)
+
     # Research results
     research_data: ResearchData | None = None
 
@@ -170,6 +172,10 @@ class AgentState(BaseModel):
     trade_approved: bool = False
     trade_executed: bool = False
     trade_amount: float = Field(default=1000.0, ge=0, allow_inf_nan=False)
+
+    # Non-secret model settings survive worker recovery.
+    model_settings: dict = Field(default_factory=dict)
+    tool_names: list[str] | None = None
 
     # Workflow control
     error: str | None = None

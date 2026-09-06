@@ -16,6 +16,8 @@ def get_redis_saver() -> RedisSaver:
     Returns:
         Configured RedisSaver instance
     """
+    if os.getenv("CHECKPOINT_ENCRYPTION_KEY"):
+        raise ValueError("Configured checkpoint encryption requires the PostgreSQL backend")
     checkpointer = RedisSaver(redis_url=get_connection_url())
     checkpointer.setup()
     return checkpointer

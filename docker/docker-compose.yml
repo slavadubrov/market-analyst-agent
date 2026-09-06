@@ -88,8 +88,8 @@ services:
 
   # ---- MCP sidecar (Part 5: The Habitat) -------------------------------
   # Exposes the data tools (stock, news, etc.) over MCP. The article's
-  # secret-broker pattern: the worker never sees API tokens; the sidecar
-  # holds them and the worker calls the sidecar over MCP.
+  # Optional server for external clients. The worker uses local tools;
+  # this is not a secret broker or an isolation boundary.
   # Opt in with `docker compose --profile mcp up`.
   mcp-sidecar:
     profiles: ["mcp"]
@@ -103,6 +103,7 @@ services:
       - "127.0.0.1:8765:8765"
     environment:
       - MCP_PORT=8765
+      - MCP_TRANSPORT=http
 
   # ---- Observability stack (Part 5: The Habitat) -----------------------
   # `docker compose --profile observability up` brings up OTel Collector,

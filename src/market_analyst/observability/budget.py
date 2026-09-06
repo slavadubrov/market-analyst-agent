@@ -1,15 +1,8 @@
-"""Per-run budgets, kill-switch, and circuit breaker.
+"""Post-call budget accounting lesson, independent of Prometheus telemetry.
 
-The article's "Cost-control failures" row in the failure-modes table says: per-
-run token budget, per-tool budget, kill-switch tied to a Prometheus counter,
-iteration cap per turn, exponential backoff, circuit breaker on tool error
-rate. This module is the bookkeeping for those rules.
-
-Design choice: the tracker holds counters in-process. Persistence across worker
-restarts comes from the LangGraph checkpoint (``AgentState.tokens_used`` and
-``AgentState.tool_calls_used`` are checkpointed fields). On boot the harness
-rehydrates the tracker from those fields, so a crash-then-resume doesn't reset
-the budget to zero.
+This utility is not wired as a prepaid run-wide spending gate. A production
+limit needs durable reservation before dispatch and settlement/reconciliation
+on response or uncertainty.
 """
 
 from __future__ import annotations

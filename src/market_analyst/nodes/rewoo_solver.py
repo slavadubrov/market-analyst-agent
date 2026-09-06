@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 
 from market_analyst.llm import get_structured_model
 from market_analyst.nodes._telemetry import node_callbacks
+from market_analyst.runtime.intervention import raise_if_intervention
 from market_analyst.schemas import AgentState, DraftReport
 
 REWOO_SOLVER_PROMPT = """You are a senior investment analyst creating a quick briefing.
@@ -51,7 +52,13 @@ def rewoo_solver_node(state: AgentState, config: RunnableConfig | None = None) -
     if not state.rewoo_plan:
         return {"error": state.error or "No ReWOO plan results to synthesize"}
 
-    structured_llm = get_structured_model(FlashBriefingOutput)
+    if state.error:
+        return {"error": state.error}
+    config = {
+        **(config or {}),
+        "configurable": {**(config or {}).get("configurable", {}), **({"model_settings": state.model_settings} if state.model_settings else {})},
+    }
+    structured_llm = get_structured_model(FlashBriefingOutput, config=config)
 
     ticker = state.research_data.ticker if state.research_data else "UNKNOWN"
 
@@ -112,6 +119,7 @@ Create a flash briefing from this data. Be concise and actionable."""
         }
 
     except Exception as e:
+        raise_if_intervention(e)
         print(f"\n❌ Solver failed: {e}")
         return {
             "error": f"ReWOO solver failed: {e}",

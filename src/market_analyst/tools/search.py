@@ -66,6 +66,7 @@ class NewsItem(BaseModel):
 
     headline: str
     source: str
+    url: str = ""
     date: str
     relevance_score: float
     key_points: list[str]
@@ -132,6 +133,7 @@ def _search_news_impl(
                 NewsItem(
                     headline=item.get("title", ""),
                     source=_extract_source(item.get("url", "")),
+                    url=item.get("url", ""),
                     date=item.get("published_date", ""),
                     relevance_score=item.get("score", 0),
                     key_points=_extract_key_points(content),

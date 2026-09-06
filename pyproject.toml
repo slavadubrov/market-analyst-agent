@@ -26,9 +26,10 @@ dependencies = [
     "prometheus-client>=0.21.0",
     # Queue + worker shape (Part 5: queue + worker + checkpoint DB)
     "redis>=5.0.0",
-    # MCP sidecar (Part 5: tools behind a proxy / secret broker pattern)
-    "mcp>=1.0.0",
+    # Optional MCP server for external clients
+    "mcp>=2.0.0,<3",
     "pycryptodome>=3.23.0",
+    "langchain>=1.2,<2",
 ]
 
 [project.scripts]
@@ -40,6 +41,9 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/market_analyst"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"skills" = "market_analyst/skills"
 
 [dependency-groups]
 dev = [
@@ -64,7 +68,7 @@ select = ["E", "F", "I", "W", "B", "C"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-v --tb=short"
+addopts = "-v --tb=short -m 'not integration'"
 markers = [
     "integration: marks tests requiring external services",
     "slow: marks slow-running tests",

@@ -1,28 +1,7 @@
-"""MCP server that wraps the project's tools.
+"""Optional MCP server for external clients; the worker uses local research tools.
 
-Design notes
-------------
-
-The sidecar exposes a curated subset of the worker's tools — the ones that
-need API credentials (Tavily, brokerage, etc.). Tools that are pure
-computations (``execute_python_analysis``) stay in-process; there is no
-secret to broker for those.
-
-The MCP protocol is implemented by the ``mcp`` package. Two transports are
-supported:
-
-- **stdio**: the canonical MCP transport. The worker spawns the sidecar as a
-  child process and reads/writes JSON-RPC over the child's stdio. This is the
-  shape used by Claude Desktop and the OpenAI Agents SDK MCP integration.
-- **http**: an HTTP-bound variant used by the docker-compose sidecar so the
-  worker container can talk to the sidecar over the bridge network.
-
-Why we don't pull the worker over to MCP today: the rest of this repo uses
-LangChain ``@tool`` functions directly. Migrating the worker to consume
-tools via an MCP client is a separate refactor (the article describes the
-shape but doesn't mandate the migration). What this sidecar does is *make
-that migration possible* without rewriting the tools — same wrapped
-implementations, just one extra hop.
+This is not a secret broker or a worker isolation boundary. Only trusted local
+clients should connect. The SDK negotiates protocol versions and capabilities.
 """
 
 from __future__ import annotations
@@ -92,9 +71,9 @@ def build_server() -> Any:
     transport they want (stdio for child-process use, HTTP for the sidecar
     container). Lazy-imports ``mcp`` so unit tests don't need the package.
     """
-    from mcp.server.fastmcp import FastMCP
+    from mcp.server import MCPServer
 
-    app = FastMCP(_SERVER_NAME)
+    app = MCPServer(_SERVER_NAME)
 
     @app.tool()
     def get_stock_snapshot(ticker: str) -> str:

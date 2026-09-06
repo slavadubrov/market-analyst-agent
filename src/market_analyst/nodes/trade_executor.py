@@ -17,16 +17,8 @@ from market_analyst.schemas import AgentState, GuardianDecision
 
 
 def _trade_call_id(state: AgentState) -> str:
-    """Derive a stable key for the trade so the idempotency store can dedupe.
-
-    Includes the action, ticker, and amount so a planner that produces two
-    different trades on the same thread still gets separate keys, but a worker
-    that crashes between "execute" and "checkpoint" hits the same key on
-    resume and replays the prior result.
-    """
-    trade = state.pending_trade
-    assert trade is not None  # caller checked
-    return f"trade:{trade.action.value}:{trade.ticker}:{int(trade.amount_usd)}"
+    """One approved business operation per run, independent of model call IDs."""
+    return "approved-trade"
 
 
 def trade_executor_node(state: AgentState, config: RunnableConfig | None = None) -> dict:
@@ -69,10 +61,10 @@ def trade_executor_node(state: AgentState, config: RunnableConfig | None = None)
     thread_id = (config or {}).get("configurable", {}).get("thread_id")
     if thread_id:
         store = get_idempotency_store()
-        seen, prior = store.reserve_or_replay(thread_id, _trade_call_id(state))
-        if seen and prior:
+        seen, prior = store.reserve_or_replay(thread_id, _trade_call_id(state), trade.model_dump(mode="json"))
+        if seen:
             print(f"\n♻️  Trade Executor: replaying prior execution for {trade.ticker}")
-            print(f"   Execution ID: {prior.get('execution_id', 'unknown')}")
+            print(f"   Execution ID: {(prior or {}).get('execution_id', 'unknown')}")
             return {
                 "trade_executed": True,
                 "pending_trade": None,

@@ -7,12 +7,11 @@ from typing import Any, cast
 from urllib.parse import quote
 
 from langgraph.checkpoint.postgres import PostgresSaver
-from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from psycopg import Connection
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
-from market_analyst.memory.encryption import get_encrypted_serializer
+from market_analyst.memory.encryption import checkpoint_serializer
 
 logger = logging.getLogger(__name__)
 
@@ -75,29 +74,7 @@ def get_postgres_saver() -> PostgresSaver:
         Configured PostgresSaver instance
     """
     pool = get_connection_pool()
-    serde = JsonPlusSerializer(
-        allowed_msgpack_modules=[
-            ("market_analyst.schemas", name)
-            for name in (
-                "AgentState",
-                "DraftReport",
-                "ExecutionMode",
-                "GuardianDecision",
-                "GuardianResult",
-                "PlanStep",
-                "ResearchData",
-                "ReWOOPlanStep",
-                "TradeRequest",
-                "TradeAction",
-                "UserProfile",
-            )
-        ],
-    )
-    encrypted_serde = get_encrypted_serializer(serde)
-    if encrypted_serde is not None:
-        checkpointer = PostgresSaver(pool, serde=encrypted_serde)
-        logger.info("PostgresSaver: checkpoint encryption enabled")
-    else:
-        checkpointer = PostgresSaver(pool, serde=serde)
+    serde = checkpoint_serializer()
+    checkpointer = PostgresSaver(pool, serde=serde)
     checkpointer.setup()
     return checkpointer

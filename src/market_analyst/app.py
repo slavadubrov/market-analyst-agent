@@ -4,14 +4,14 @@ This file provides a web interface for the Market Analyst Agent,
 offering similar functionality to the CLI but in a browser-based environment.
 """
 
-import os
 import uuid
 from typing import Any
 
 import gradio as gr
 from dotenv import load_dotenv
 
-from market_analyst.constants import DEFAULT_MODEL_KEY, MODEL_ENV_VAR, MODEL_MAP
+from market_analyst.constants import DEFAULT_MODEL_KEY, MODEL_MAP
+from market_analyst.llm import ModelSettings
 from market_analyst.memory import get_checkpointer, get_long_term_memory
 from market_analyst.nodes.reporter import format_report_for_display
 from market_analyst.schemas import DraftReport, ExecutionMode, UserProfile
@@ -104,7 +104,6 @@ def run_analysis_ui(
         thread_id = str(uuid.uuid4())
 
     # Set model
-    os.environ[MODEL_ENV_VAR] = MODEL_MAP[model]
 
     # Determine mode
     force_mode = None
@@ -128,12 +127,15 @@ def run_analysis_ui(
             thread_id=thread_id,
             checkpointer=checkpointer,
             force_mode=force_mode,
+            model_settings=ModelSettings.from_env(model),
         )
 
         report_md = ""
         if result.get("draft_report"):
             report_md = format_report_for_display(result["draft_report"])
 
+        if result.get("needs_revision"):
+            return report_md, "Draft needs revision: " + "; ".join(result["state"].get("evaluator_reasons", [])), thread_id, gr.update(visible=False)
         if result.get("requires_approval"):
             status_msg += "\n\n⏸️ PAUSED - Awaiting approval."
             return report_md, status_msg, thread_id, gr.update(visible=True)
@@ -297,7 +299,6 @@ def _handle_combined_result(result, status_log, thread_id):
 def run_combined_ui(query, user_id, model, mode, trade_amount):
     """Run combined workflow."""
     thread_id = str(uuid.uuid4())
-    os.environ[MODEL_ENV_VAR] = MODEL_MAP[model]
     force_mode = _parse_force_mode(mode)
 
     try:
@@ -314,6 +315,7 @@ def run_combined_ui(query, user_id, model, mode, trade_amount):
             thread_id=thread_id,
             checkpointer=checkpointer,
             force_mode=force_mode,
+            model_settings=ModelSettings.from_env(model),
             trade_amount=float(trade_amount),
         )
         return _handle_combined_result(result, status_log, thread_id)
@@ -383,7 +385,7 @@ with gr.Blocks(title="Market Analyst Agent") as demo:
                 with gr.Column():
                     a_query = gr.Textbox(label="Query", placeholder="Analyze NVDA stock...")
                     a_user_id = gr.Textbox(label="User ID", value="default")
-                    a_model = gr.Dropdown(choices=list(MODEL_MAP.keys()), value=DEFAULT_MODEL_KEY, label="Model")
+                    a_model = gr.Dropdown(choices=list(MODEL_MAP.keys()), value=DEFAULT_MODEL_KEY, allow_custom_value=True, label="Model")
                     a_mode = gr.Dropdown(choices=["auto", "deep", "flash"], value="auto", label="Mode")
                     a_thread_id_input = gr.Textbox(label="Thread ID (Optional - for resuming)", placeholder="Leave empty for new analysis")
                     a_resume_thread = gr.Textbox(label="Resume Thread ID (Alternative)", visible=False)  # Helper for interruption
@@ -442,7 +444,7 @@ with gr.Blocks(title="Market Analyst Agent") as demo:
                     c_query = gr.Textbox(label="Query", placeholder="Analyze output and trade...")
                     c_user_id = gr.Textbox(label="User ID", value="default")
                     c_trade_amt = gr.Number(label="Trade Amount (USD)", value=1000)
-                    c_model = gr.Dropdown(choices=list(MODEL_MAP.keys()), value=DEFAULT_MODEL_KEY, label="Model")
+                    c_model = gr.Dropdown(choices=list(MODEL_MAP.keys()), value=DEFAULT_MODEL_KEY, allow_custom_value=True, label="Model")
                     c_mode = gr.Dropdown(choices=["auto", "deep", "flash"], value="auto", label="Mode")
                     c_run_btn = gr.Button("Start Workflow", variant="primary")
 

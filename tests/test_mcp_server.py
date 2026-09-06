@@ -57,3 +57,29 @@ def test_tool_table_has_expected_entries():
         "search_news",
         "search_competitors",
     }
+
+
+def test_real_stdio_negotiates_pinned_read_only_surface():
+    import os
+    import sys
+
+    import anyio
+    from mcp import ClientSession, StdioServerParameters
+    from mcp.client.stdio import stdio_client
+
+    async def check():
+        server = StdioServerParameters(
+            command=sys.executable, args=["-m", "market_analyst.mcp_server"], env={"PATH": os.environ["PATH"], "MCP_TRANSPORT": "stdio"}
+        )
+        async with stdio_client(server) as (read, write):
+            async with ClientSession(read, write) as session:
+                initialized = await session.initialize()
+                assert initialized.protocol_version == "2025-11-25"
+                assert initialized.capabilities.tools is not None
+                names = {tool.name for tool in (await session.list_tools()).tools}
+                assert names == {"get_stock_snapshot", "get_price_history", "get_financials", "search_news", "search_competitors"}
+                assert "execute_trade" not in names
+                result = await session.call_tool("get_stock_snapshot", {"ticker": "invalid!"})
+                assert result.is_error
+
+    anyio.run(check)

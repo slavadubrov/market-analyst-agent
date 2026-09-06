@@ -8,6 +8,7 @@ demonstrates the Guardian pattern:
                               Human Review (if escalated)
 """
 
+import uuid
 from typing import Literal
 
 from langchain_core.runnables import RunnableConfig
@@ -17,6 +18,7 @@ from langgraph.graph.state import CompiledStateGraph
 
 from market_analyst.nodes.guardian import guardian_node
 from market_analyst.nodes.trade_executor import trade_executor_node
+from market_analyst.runtime.ownership import serialized_run
 from market_analyst.schemas import (
     AgentState,
     GuardianDecision,
@@ -104,6 +106,7 @@ def create_trade_graph(checkpointer: BaseCheckpointSaver | None = None) -> Compi
     )
 
 
+@serialized_run
 def run_trade(
     action: str,
     ticker: str,
@@ -125,7 +128,6 @@ def run_trade(
     Returns:
         Result dict with trade status and thread_id
     """
-    import uuid
 
     # Validate action
     try:
@@ -154,7 +156,7 @@ def run_trade(
     config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
 
     # Run the graph
-    result = graph.invoke(initial_state, config)
+    result = graph.invoke(initial_state, config, durability="sync" if checkpointer else None)
 
     # Check if we hit the HITL interrupt (only works with checkpointer)
     requires_approval = bool(result.get("guardian_result") and result["guardian_result"].decision == GuardianDecision.ESCALATE)
@@ -172,6 +174,7 @@ def run_trade(
     }
 
 
+@serialized_run
 def approve_trade(
     thread_id: str,
     checkpointer: BaseCheckpointSaver,
@@ -221,7 +224,7 @@ def approve_trade(
     graph.update_state(config, update_values)
 
     # Resume execution
-    result = graph.invoke(None, config)
+    result = graph.invoke(None, config, durability="sync" if checkpointer else None)
 
     return {
         "thread_id": thread_id,

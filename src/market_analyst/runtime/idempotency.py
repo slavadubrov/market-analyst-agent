@@ -1,19 +1,7 @@
-"""Idempotency-key store for tool calls with side effects.
+"""Durable operation ledger: reserve before an effect, replay only completed work.
 
-Per the article: any tool with side effects needs an idempotency key derived
-from ``(session_id, tool_call_id)``, stored *before* the side effect fires.
-At-least-once delivery makes retries inevitable; without keys, duplicate
-writes are inevitable too.
-
-The store is a filesystem-backed key-value DB rooted at
-``./.idempotency``. Each key becomes a file containing the JSON-serialized
-result, so the second call returns the same payload it returned the first
-time and the side effect never re-runs.
-
-Why filesystem (not Postgres / Redis): the reference repo runs on
-``docker compose up`` with no shared infra beyond what the agent already
-needs. Production deployments should swap this for the same Postgres that
-holds checkpoints (one transaction insert-or-fetch).
+SQLite transactions coordinate local processes. Pending/unknown operations require
+reconciliation; a timeout is never permission to repeat an external effect.
 """
 
 from __future__ import annotations
@@ -21,6 +9,8 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import sqlite3
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -28,88 +18,86 @@ from typing import Any
 _DEFAULT_ROOT = Path(os.getenv("IDEMPOTENCY_ROOT", "./.idempotency")).resolve()
 
 
-def _hash_key(thread_id: str, tool_call_id: str) -> str:
-    """Hash (thread_id, tool_call_id) → 16-char hex for filesystem-safe keys."""
-    digest = hashlib.sha256(f"{thread_id}::{tool_call_id}".encode()).hexdigest()
-    return digest[:16]
+class OperationUncertain(RuntimeError):
+    """An earlier attempt may have executed; inspect its outcome before retrying."""
 
 
 @dataclass
 class IdempotencyStore:
-    """Filesystem-backed idempotency key store.
-
-    Single-writer semantics within a process; concurrent writers across
-    processes are safe at coarse granularity because each key is its own
-    file (atomic create on POSIX via ``O_EXCL`` is below in
-    :meth:`reserve_or_replay`).
-    """
+    """One local ledger shared by processes; use a shared DB for multiple hosts."""
 
     root: Path = _DEFAULT_ROOT
 
     def __post_init__(self) -> None:
         self.root.mkdir(parents=True, exist_ok=True)
+        with self._connection() as db:
+            db.execute("CREATE TABLE IF NOT EXISTS operations (key TEXT PRIMARY KEY, parameters TEXT NOT NULL, status TEXT NOT NULL, result TEXT)")
 
-    def _path_for(self, thread_id: str, tool_call_id: str) -> Path:
-        return self.root / f"{_hash_key(thread_id, tool_call_id)}.json"
+    @contextmanager
+    def _connection(self):
+        db = sqlite3.connect(self.root / "operations.sqlite3", timeout=10)
+        try:
+            with db:
+                yield db
+        finally:
+            db.close()
+
+    @staticmethod
+    def _key(thread_id: str, operation_id: str) -> str:
+        return json.dumps([thread_id, operation_id])
 
     def has(self, thread_id: str, tool_call_id: str) -> bool:
-        return self._path_for(thread_id, tool_call_id).exists()
+        with self._connection() as db:
+            return db.execute("SELECT 1 FROM operations WHERE key=?", (self._key(thread_id, tool_call_id),)).fetchone() is not None
 
     def fetch(self, thread_id: str, tool_call_id: str) -> Any | None:
-        """Return the stored result, or ``None`` when the key is unknown."""
-        path = self._path_for(thread_id, tool_call_id)
-        if not path.exists():
+        with self._connection() as db:
+            row = db.execute("SELECT status, result FROM operations WHERE key=?", (self._key(thread_id, tool_call_id),)).fetchone()
+        if row is None:
             return None
-        try:
-            return json.loads(path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError:
-            # Half-written file from a crashed reservation; treat as missing
-            # so the next call re-runs the side effect from scratch.
-            return None
+        if row[0] != "completed":
+            raise OperationUncertain(f"Operation {tool_call_id} is {row[0]}; reconciliation required")
+        return json.loads(row[1])
 
     def store(self, thread_id: str, tool_call_id: str, result: Any) -> None:
-        """Persist the result of an idempotent operation.
+        """Settle a reserved effect, or record a result confirmed by reconciliation."""
+        with self._connection() as db:
+            changed = db.execute(
+                "UPDATE operations SET status='completed', result=? WHERE key=? AND status IN ('pending', 'unknown')",
+                (json.dumps(result), self._key(thread_id, tool_call_id)),
+            ).rowcount
+            if not changed:
+                raise ValueError("Operation must be reserved and not already completed")
 
-        Writes to a temp file in the same directory then renames into place,
-        so a partial write never leaves a corrupted JSON file behind.
-        """
-        path = self._path_for(thread_id, tool_call_id)
-        tmp = path.with_suffix(".json.tmp")
-        tmp.write_text(json.dumps(result), encoding="utf-8")
-        tmp.replace(path)
+    def mark_unknown(self, thread_id: str, tool_call_id: str) -> None:
+        with self._connection() as db:
+            db.execute("UPDATE operations SET status='unknown' WHERE key=? AND status='pending'", (self._key(thread_id, tool_call_id),))
 
-    def reserve_or_replay(self, thread_id: str, tool_call_id: str) -> tuple[bool, Any | None]:
-        """Atomically: if seen, return ``(True, prior_result)``; else mark seen.
-
-        The "reserve" semantics mean: by the time you call the underlying side
-        effect, this function has already claimed the key. A duplicate call
-        from another worker will see the marker and short-circuit.
-
-        Returns:
-            ``(seen, result)`` where ``seen`` is ``True`` when a prior result
-            exists. The caller should return ``result`` directly on a replay
-            and otherwise proceed with the side effect, calling
-            :meth:`store` once the operation succeeds.
-        """
-        path = self._path_for(thread_id, tool_call_id)
-        if path.exists():
-            return True, self.fetch(thread_id, tool_call_id)
-        # Reserve by creating an empty marker; .store() will overwrite later.
-        # O_EXCL avoids two workers both passing this check on the same key.
-        try:
-            fd = os.open(str(path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-            os.close(fd)
-        except FileExistsError:
-            return True, self.fetch(thread_id, tool_call_id)
-        return False, None
+    def reserve_or_replay(self, thread_id: str, tool_call_id: str, parameters: Any = None) -> tuple[bool, Any | None]:
+        """Claim a business operation; changed arguments or uncertain outcomes stop."""
+        key = self._key(thread_id, tool_call_id)
+        payload = json.dumps(parameters, sort_keys=True, allow_nan=False)
+        # Old empty file reservations are uncertain too. Never silently re-execute.
+        legacy = self.root / (hashlib.sha256(f"{thread_id}::{tool_call_id}".encode()).hexdigest()[:16] + ".json")
+        if legacy.exists():
+            raise OperationUncertain("Legacy operation requires reconciliation before migration")
+        with self._connection() as db:
+            inserted = db.execute("INSERT OR IGNORE INTO operations VALUES (?, ?, 'pending', NULL)", (key, payload)).rowcount
+            if inserted:
+                return False, None
+            row = db.execute("SELECT parameters, status, result FROM operations WHERE key=?", (key,)).fetchone()
+            if row[0] != payload:
+                raise ValueError("Operation ID is already bound to different parameters")
+            if row[1] != "completed":
+                raise OperationUncertain(f"Operation {tool_call_id} is {row[1]}; reconciliation required")
+            return True, json.loads(row[2])
 
 
 _store: IdempotencyStore | None = None
 
 
 def get_idempotency_store() -> IdempotencyStore:
-    """Return the process-singleton store. First call creates the directory."""
     global _store
     if _store is None:
-        _store = IdempotencyStore()
+        _store = IdempotencyStore(root=_DEFAULT_ROOT)
     return _store

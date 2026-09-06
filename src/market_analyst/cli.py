@@ -14,7 +14,7 @@ import uuid
 from dotenv import load_dotenv
 from langchain_core.runnables import RunnableConfig
 
-from market_analyst.constants import DEFAULT_MODEL_KEY, MODEL_ENV_VAR, MODEL_MAP
+from market_analyst.llm import ModelSettings
 from market_analyst.logging_config import setup_logging
 from market_analyst.memory import (
     get_checkpointer,
@@ -49,8 +49,8 @@ def _get_optional_checkpointer(args):
         return checkpointer
     except Exception as e:
         print(f"   ⚠️  Checkpoint storage not available: {e}")
-        print("   Continuing without persistence...")
-        return None
+        print("   Start the database, or explicitly use --no-persist for a draft-only run.")
+        raise SystemExit(1) from e
 
 
 def _parse_force_mode(mode_str):
@@ -349,9 +349,8 @@ Examples:
     parser.add_argument("--no-persist", action="store_true", help="Run without database persistence")
     parser.add_argument(
         "--model",
-        choices=list(MODEL_MAP.keys()),
-        default=DEFAULT_MODEL_KEY,
-        help="Model to use: 'sonnet' (powerful, slower) or 'haiku' (fast, cheaper)",
+        default=None,
+        help="Provider model/deployment ID (or historical sonnet/haiku alias)",
     )
     parser.add_argument(
         "--mode",
@@ -444,13 +443,6 @@ Examples:
 
     args = parser.parse_args()
 
-    # Check for required env vars
-    if not args.set_profile:
-        if not (os.getenv("ANTHROPIC_API_KEY") or os.getenv("OPENAI_API_KEY")):
-            print("❌ Error: ANTHROPIC_API_KEY or OPENAI_API_KEY environment variable not set")
-            print("   Copy .env.example to .env and add your API key")
-            sys.exit(1)
-
     if _dispatch_simple_commands(args) or _dispatch_validated_commands(args):
         return
 
@@ -499,6 +491,10 @@ def set_user_profile(args):
 
 def _print_analysis_result(result, args, thread_id):
     """Print the result of a stock analysis."""
+    if result.get("needs_revision"):
+        print("Draft rejected by evaluator; collect sufficient evidence and start a new run.")
+        print("\n".join(result["state"].get("evaluator_reasons", [])))
+        return
     if args.show_plan:
         print("\n📋 Research Plan:")
         for step in result["state"].get("plan", []):
@@ -535,7 +531,6 @@ def run_new_analysis(args):
     print("-" * 60)
 
     checkpointer = _get_optional_checkpointer(args)
-    os.environ[MODEL_ENV_VAR] = MODEL_MAP[args.model]
     print(f"   🤖 Using model: {args.model}")
     force_mode = _parse_force_mode(args.mode)
 
@@ -549,6 +544,7 @@ def run_new_analysis(args):
                 thread_id=thread_id,
                 checkpointer=checkpointer,
                 force_mode=force_mode,
+                model_settings=ModelSettings.from_env(args.model),
             )
             harness.final_state = result.get("state")
             _print_analysis_result(result, args, thread_id)
@@ -578,14 +574,23 @@ def resume_analysis(args):
         # Get current state
         state = graph.get_state(config)
 
-        if not state:
+        if not state or not state.values:
             print(f"❌ No saved state found for thread {args.thread_id}")
             sys.exit(1)
 
         print(f"   Found state at step {state.values.get('current_step_index', 0)}")
 
         # Resume execution
-        result = graph.invoke(None, config)
+        original = state.values.get("messages", [])
+        if not original:
+            raise ValueError("Saved run has no original request")
+        result = run_analysis(
+            original[0].content,
+            user_id=state.values.get("user_id", "default"),
+            thread_id=args.thread_id,
+            checkpointer=checkpointer,
+            retry_delivery=True,
+        )["state"]
 
         if result.get("draft_report"):
             print(format_report_for_display(result["draft_report"]))
@@ -777,7 +782,6 @@ def run_combined_command(args):
     print("-" * 60)
 
     checkpointer = _get_optional_checkpointer(args)
-    os.environ[MODEL_ENV_VAR] = MODEL_MAP[args.model]
     print(f"   🤖 Using model: {args.model}")
     force_mode = _parse_force_mode(args.mode)
 
@@ -791,6 +795,7 @@ def run_combined_command(args):
                 thread_id=thread_id,
                 checkpointer=checkpointer,
                 force_mode=force_mode,
+                model_settings=ModelSettings.from_env(args.model),
                 trade_amount=args.trade_amount,
             )
             harness.final_state = result.get("state")
