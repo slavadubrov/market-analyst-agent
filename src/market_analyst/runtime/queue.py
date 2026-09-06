@@ -1,26 +1,7 @@
-"""Redis Streams queue + worker (Part 5: queue + worker + checkpoint DB shape).
+"""At-least-once Redis delivery with pending reclamation and a dead-letter stream.
 
-The article calls this shape out as "the default I recommend for most teams":
-
-> The app accepts a request, creates a session row, pushes a job, and returns
-> a run ID. The worker pulls the job, runs the harness, writes checkpoints,
-> streams status, and stores artifacts as it goes. Postgres survives, workers
-> are cattle, queue depth gives you backpressure.
-
-This module is the queue half (push + pull); :mod:`market_analyst.runtime.worker`
-is the consumer loop.
-
-Implementation notes
---------------------
-
-- Redis Streams (``XADD`` / ``XREADGROUP``) gives at-least-once delivery and
-  a consumer-group abstraction without standing up RabbitMQ.
-- The job payload is a JSON dict with ``thread_id``, ``user_id``, ``query``,
-  ``mode``. It's the minimum the worker needs to reconstruct an invocation.
-- Acknowledgement (``XACK``) happens only after the worker writes a checkpoint
-  successfully. A crash between pull and ack causes the message to be
-  re-delivered, which is fine because the checkpoint plus the idempotency
-  store make resumes safe.
+Reclamation does not establish ownership of a running graph. The worker also
+holds a process lock for its run on the shared local workspace volume.
 """
 
 from __future__ import annotations
@@ -35,6 +16,7 @@ import redis
 
 STREAM_KEY = os.getenv("RUN_QUEUE_STREAM", "market_analyst:runs")
 CONSUMER_GROUP = os.getenv("RUN_QUEUE_GROUP", "workers")
+_claim_cursors: dict[str, str] = {}
 
 
 def _redis_client(url: str | None = None) -> redis.Redis:
@@ -66,6 +48,7 @@ class RunJob:
     user_id: str
     query: str
     mode: str  # "auto" | "deep" | "flash"
+    deliveries: int = 1
 
 
 def push_run(
@@ -99,28 +82,42 @@ def pull_one(
     *,
     block_ms: int = 5000,
     client: redis.Redis | None = None,
+    reclaim_idle_ms: int = 60000,
 ) -> RunJob | None:
     """Block for one message; return ``None`` on timeout."""
     r = client or _redis_client()
     ensure_consumer_group(r)
-    streams = cast(
-        list[tuple[str, list[tuple[str, dict[str, str]]]]],
-        r.xreadgroup(
-            groupname=CONSUMER_GROUP,
-            consumername=consumer_name,
-            streams={STREAM_KEY: ">"},
-            count=1,
-            block=block_ms,
-        ),
+    claimed = cast(
+        Any, r.xautoclaim(STREAM_KEY, CONSUMER_GROUP, consumer_name, min_idle_time=reclaim_idle_ms, start_id=_claim_cursors.get(consumer_name, "0-0"), count=1)
     )
-    if not streams:
-        return None
-    _stream, entries = streams[0]
+    _claim_cursors[consumer_name] = claimed[0]
+    entries = claimed[1]
+    if not entries:
+        streams = cast(Any, r.xreadgroup(groupname=CONSUMER_GROUP, consumername=consumer_name, streams={STREAM_KEY: ">"}, count=1, block=block_ms))
+        entries = streams[0][1] if streams else []
     if not entries:
         return None
     message_id, fields = entries[0]
-    payload = json.loads(fields["job"])
-    return RunJob(message_id=message_id, **payload)
+    try:
+        payload = json.loads(fields["job"])
+        if payload.get("mode") not in {"auto", "deep", "flash"} or not all(
+            isinstance(payload.get(k), str) and payload[k] for k in ("thread_id", "user_id", "query")
+        ):
+            raise ValueError("Invalid job payload")
+        pending = cast(Any, r.xpending_range(STREAM_KEY, CONSUMER_GROUP, message_id, message_id, 1))
+        return RunJob(message_id=message_id, **payload, deliveries=pending[0]["times_delivered"] if pending else 1)
+    except (ValueError, TypeError, KeyError) as exc:
+        dead_letter(message_id, fields, str(exc), client=r)
+        return None
+
+
+def dead_letter(message_id: str, payload: dict, error: str, *, client=None) -> None:
+    """Record failure and acknowledge atomically; an unavailable Redis leaves pending."""
+    r = client or _redis_client()
+    with r.pipeline(transaction=True) as pipe:
+        pipe.xadd(STREAM_KEY + ":dead", {"message_id": message_id, "payload": json.dumps(payload), "error": error})
+        pipe.xack(STREAM_KEY, CONSUMER_GROUP, message_id)
+        pipe.execute()
 
 
 def ack(message_id: str, client: redis.Redis | None = None) -> None:

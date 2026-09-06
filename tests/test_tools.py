@@ -299,6 +299,7 @@ def test_use_skill_invalid():
 # --- Test Code Execution (Modality 4) ---
 
 
+@pytest.mark.integration
 def test_code_exec_simple_calculation():
     """Test executing a simple Python calculation."""
     from market_analyst.tools.code_exec import execute_python_analysis
@@ -307,6 +308,7 @@ def test_code_exec_simple_calculation():
     assert "4" in result
 
 
+@pytest.mark.integration
 def test_code_exec_financial_calculation():
     """Test executing a financial calculation."""
     from market_analyst.tools.code_exec import execute_python_analysis

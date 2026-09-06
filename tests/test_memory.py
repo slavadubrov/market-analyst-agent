@@ -167,7 +167,7 @@ def test_search_profiles_uses_current_qdrant_api(mocker):
     mock_client = mocker.patch("market_analyst.memory.long.get_client").return_value
     mock_client.query_points.return_value.points = []
 
-    assert LongTermMemory().search_profiles([0.0] * 768) == []
+    assert LongTermMemory().search_profiles([0.0] * 768, user_id="test") == []
     mock_client.query_points.assert_called_once()
 
 

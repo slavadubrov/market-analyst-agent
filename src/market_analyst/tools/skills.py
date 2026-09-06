@@ -11,7 +11,9 @@ from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
 # Default skills directory (relative to project root)
-_SKILLS_DIR = Path(__file__).parent.parent.parent.parent / "skills"
+_SKILLS_DIR = Path(__file__).parent.parent / "skills"
+if not _SKILLS_DIR.exists():
+    _SKILLS_DIR = Path(__file__).parent.parent.parent.parent / "skills"
 
 
 class SkillMetadata(BaseModel):

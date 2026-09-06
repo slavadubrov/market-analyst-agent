@@ -1,16 +1,7 @@
-"""Worker loop for the queue + worker + checkpoint DB shape.
+"""Recover queued analyses. Success/approval waits are acknowledged; failures retry.
 
-Run with ``python -m market_analyst.runtime.worker``. The loop:
-
-1. Reads a job off the Redis Stream.
-2. Calls ``run_analysis`` (the same entry point the CLI uses).
-3. Acks the message once the run returns (or fails — the harness's debug
-   bundle captures everything needed to investigate later).
-
-Crash semantics: a worker that dies between pull and ack will see the same
-message redelivered. The checkpoint DB + idempotency store make that
-re-delivery safe — the new run resumes from the last checkpoint and replays
-any side-effecting tool calls instead of re-running them.
+After three deliveries a failure is atomically recorded in the dead-letter stream.
+One shared workspace volume is required; this is a single-host teaching runtime.
 """
 
 from __future__ import annotations
@@ -24,9 +15,12 @@ from typing import Any
 
 from market_analyst.memory import get_checkpointer
 from market_analyst.runtime.harness import harness_run
+from market_analyst.runtime.intervention import ProviderIntervention
+from market_analyst.runtime.ownership import RunBusy
 from market_analyst.runtime.queue import (
     RunJob,
     ack,
+    dead_letter,
     ensure_consumer_group,
     pull_one,
 )
@@ -73,6 +67,7 @@ def _process_job(job: RunJob) -> None:
             thread_id=job.thread_id,
             checkpointer=checkpointer,
             force_mode=_mode_from_string(job.mode),
+            retry_delivery=True,
         )
         ctx.final_state = result.get("state")
         logger.info(
@@ -105,14 +100,24 @@ def run_forever(consumer_name: str | None = None) -> None:
             continue
         try:
             _process_job(job)
+        except RunBusy:
+            continue  # Active writer owns it; leave pending for a later claim.
         except Exception as exc:
             # The harness wrote a debug bundle; log + continue so one bad job
             # doesn't take the worker down.
             logger.exception("Job %s failed: %s", job.message_id, exc)
+            if isinstance(exc, ProviderIntervention) or job.deliveries >= 3:
+                from dataclasses import asdict
+
+                dead_letter(job.message_id, asdict(job), type(exc).__name__)
+            continue
         ack(job.message_id)
 
 
 if __name__ == "__main__":
+    from dotenv import load_dotenv
+
+    load_dotenv()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
     try:
         run_forever()

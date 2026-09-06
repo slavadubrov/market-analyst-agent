@@ -8,6 +8,8 @@ These tools demonstrate ACI (Agent-Computer Interface) design principles:
 - Concise, high-signal responses optimized for token efficiency
 """
 
+from datetime import datetime, timezone
+
 import yfinance as yf
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field, field_validator
@@ -68,7 +70,15 @@ class FinancialsQuery(StockQuery):
 # ---------------------------------------------------------------------------
 
 
-class StockSnapshot(BaseModel):
+class MarketDataResult(BaseModel):
+    """Source provenance is distinct from the time this tool fetched the data."""
+
+    source_url: str = "https://finance.yahoo.com/"
+    fetched_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    market_timestamp: str | None = None
+
+
+class StockSnapshot(MarketDataResult):
     """Consolidated stock snapshot — the agent never sees raw API noise.
 
     Replaces separate get_stock_price + get_company_metrics calls.
@@ -84,7 +94,7 @@ class StockSnapshot(BaseModel):
     summary: str
 
 
-class PriceHistoryResult(BaseModel):
+class PriceHistoryResult(MarketDataResult):
     """Result from get_price_history tool."""
 
     ticker: str
@@ -99,7 +109,7 @@ class PriceHistoryResult(BaseModel):
     summary: str
 
 
-class FinancialsResult(BaseModel):
+class FinancialsResult(MarketDataResult):
     """Result from get_financials tool."""
 
     ticker: str
@@ -173,6 +183,8 @@ def get_stock_snapshot(ticker: str) -> StockSnapshot:
         _stock, info, fast_info = _fetch_ticker_info(ticker)
 
         price = fast_info.get("lastPrice", info.get("currentPrice", 0))
+        if price is None or price <= 0:
+            raise ValueError("No valid market price available")
         change_pct = round(info.get("regularMarketChangePercent", 0) or 0, 2)
         volume = info.get("regularMarketVolume", 0) or 0
         market_cap = info.get("marketCap", 0) or 0
@@ -183,6 +195,8 @@ def get_stock_snapshot(ticker: str) -> StockSnapshot:
         summary = f"{ticker} at ${price:.2f} ({direction} {abs(change_pct):.1f}%), market cap ${market_cap_b}B, P/E {pe_ratio or 'N/A'}"
 
         return StockSnapshot(
+            source_url=f"https://finance.yahoo.com/quote/{ticker}/",
+            market_timestamp=datetime.fromtimestamp(info["regularMarketTime"], timezone.utc).isoformat() if info.get("regularMarketTime") else None,
             ticker=ticker,
             price=price,
             change_pct=change_pct,
@@ -232,6 +246,8 @@ def get_price_history(ticker: str, period: str = "1mo") -> PriceHistoryResult:
         )
 
         return PriceHistoryResult(
+            source_url=f"https://finance.yahoo.com/quote/{ticker}/history/",
+            market_timestamp=str(hist.index[-1]),
             ticker=ticker,
             period=period,
             data_points=len(hist),
@@ -316,7 +332,10 @@ def get_financials(ticker: str, statement_type: str = "income") -> FinancialsRes
 
         sorted_periods = sorted(all_periods, reverse=True)
 
+        if not all_data:
+            raise ValueError("No financial statement data available")
         return FinancialsResult(
+            source_url=f"https://finance.yahoo.com/quote/{ticker}/financials/",
             ticker=ticker,
             statement_type=statement_type,
             periods=sorted_periods,

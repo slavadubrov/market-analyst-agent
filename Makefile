@@ -9,7 +9,7 @@ setup:
 
 # Install dependencies (syncs with uv.lock)
 install:
-	uv sync
+	uv sync --locked
 
 # Run tests
 test: install
@@ -17,12 +17,13 @@ test: install
 
 # Format code using ruff
 format: install
-	uv run ruff format .
 	uv run ruff check --fix .
+	uv run ruff format .
 
 # Lint code using ruff
 lint: install
 	uv run ruff check .
+	uv run ruff format --check .
 
 # Run static type checking
 type-check: install
@@ -94,7 +95,7 @@ observability-up:
 observability-down:
 	docker compose -f docker/docker-compose.yml --env-file .env --profile observability stop
 
-# Bring up the MCP sidecar (secret-broker pattern: tools behind a proxy).
+# Bring up the optional MCP server for external clients.
 mcp-up:
 	docker compose -f docker/docker-compose.yml --env-file .env --profile mcp up -d mcp-sidecar
 
@@ -102,7 +103,7 @@ mcp-down:
 	docker compose -f docker/docker-compose.yml --env-file .env --profile mcp stop mcp-sidecar
 
 # Run the queue worker locally (queue+worker+checkpoint DB shape).
-# Producer side: any `market-analyst …` invocation that hits the CLI.
+# Producer side: queue-push or the push_run Python function.
 # Consumer side: this loop.
 worker: install db-up
 	OTEL_SERVICE_NAME=market-analyst-worker uv run python -m market_analyst.runtime.worker

@@ -97,7 +97,10 @@ def harness_run(thread_id: str, *, workflow_name: str | None = None) -> Iterator
     ctx = HarnessContext(thread_id=thread_id, workspace=workspace, initializer=initializer)
     try:
         yield ctx
-        write_progress(workspace, line="COMPLETED")
+        state = ctx.final_state or {}
+        waiting = isinstance(state, dict) and state.get("draft_report") and not state.get("report_approved")
+        status = "NEEDS_REVISION" if isinstance(state, dict) and state.get("evaluator_verdict") == "fail" else "AWAITING_APPROVAL" if waiting else "COMPLETED"
+        write_progress(workspace, line=status)
     except Exception as exc:
         write_progress(workspace, line=f"FAILED: {type(exc).__name__}: {exc}")
         try:

@@ -10,57 +10,32 @@ This module defines the complete Market Analyst Agent graph with:
 
 import uuid
 from datetime import datetime
-from pathlib import Path
-from typing import Literal
 
 from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver
-from langgraph.graph import END, START, StateGraph
+from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
+from market_analyst.llm import ModelSettings
 from market_analyst.memory import (
     DocumentMetadata,
     get_document_memory,
     load_user_profile,
 )
-from market_analyst.nodes.executor import executor_node
-from market_analyst.nodes.planner import planner_node
-from market_analyst.nodes.reporter import reporter_node
-from market_analyst.nodes.rewoo_planner import rewoo_planner_node
-from market_analyst.nodes.rewoo_solver import rewoo_solver_node
-from market_analyst.nodes.rewoo_worker import rewoo_worker_node
-from market_analyst.nodes.router import router_node
-from market_analyst.runtime.evaluator import evaluator_node
-from market_analyst.schemas import AgentState, DraftReport, ExecutionMode
-
-
-def route_after_router(state: AgentState) -> Literal["planner", "rewoo_planner"]:
-    """Route based on execution mode set by router.
-
-    Routes to:
-    - planner: For deep research (Plan-and-Execute + ReAct)
-    - rewoo_planner: For flash briefing (ReWOO)
-    """
-    if state.execution_mode == ExecutionMode.FLASH_BRIEFING:
-        return "rewoo_planner"
-    return "planner"
-
-
-def route_after_executor(state: AgentState) -> Literal["executor", "reporter"]:
-    """Route based on plan completion status.
-
-    If there are more steps to execute, continue to executor.
-    If all steps complete, move to reporter.
-    """
-    if state.current_step_index >= len(state.plan):
-        return "reporter"
-    return "executor"
+from market_analyst.runtime.ownership import serialized_run
+from market_analyst.schemas import AgentState, DraftReport, ExecutionMode, UserProfile
+from market_analyst.tools.registry import tool_registry
+from market_analyst.workflows.research import add_research_nodes
+from market_analyst.workflows.research import route_after_executor as route_after_executor
+from market_analyst.workflows.research import route_after_router as route_after_router
 
 
 def create_graph(
     checkpointer: BaseCheckpointSaver | None = None,
     force_mode: ExecutionMode | None = None,
+    *,
+    nodes: dict | None = None,
 ) -> CompiledStateGraph:
     """Create the Market Analyst Agent graph.
 
@@ -83,66 +58,9 @@ def create_graph(
         ``execution_mode`` on the initial ``AgentState`` instead — the router
         node short-circuits when the mode is already set.
     """
-    # Build the graph
     builder = StateGraph(AgentState)
-
-    # Add all nodes
-    # Router (entry point)
-    builder.add_node("router", router_node)
-
-    # Deep Research path (Plan-and-Execute + ReAct)
-    builder.add_node("planner", planner_node)
-    builder.add_node("executor", executor_node)
-    builder.add_node("reporter", reporter_node)
-
-    # Flash Briefing path (ReWOO)
-    builder.add_node("rewoo_planner", rewoo_planner_node)
-    builder.add_node("rewoo_worker", rewoo_worker_node)
-    builder.add_node("rewoo_solver", rewoo_solver_node)
-
-    # Fresh-context evaluator subagent (Part 5: generator/evaluator split).
-    # Sits between report and publish; on default-FAIL the human reviewer
-    # still has the chance to approve via the existing interrupt.
-    builder.add_node("evaluator", evaluator_node)
-
-    # Publish (shared by both paths)
+    add_research_nodes(builder, nodes=nodes)
     builder.add_node("publish", publish_node)
-
-    # Define edges
-    # Entry: Router classifies intent
-    builder.add_edge(START, "router")
-
-    # Router branches to appropriate path
-    builder.add_conditional_edges(
-        "router",
-        route_after_router,
-        {
-            "planner": "planner",
-            "rewoo_planner": "rewoo_planner",
-        },
-    )
-
-    # Deep Research path: planner → executor (loop) → reporter → evaluator → publish
-    builder.add_edge("planner", "executor")
-    builder.add_conditional_edges(
-        "executor",
-        route_after_executor,
-        {
-            "executor": "executor",
-            "reporter": "reporter",
-        },
-    )
-    builder.add_edge("reporter", "evaluator")
-
-    # Flash Briefing path: rewoo_planner → rewoo_worker → rewoo_solver → evaluator → publish
-    builder.add_edge("rewoo_planner", "rewoo_worker")
-    builder.add_edge("rewoo_worker", "rewoo_solver")
-    builder.add_edge("rewoo_solver", "evaluator")
-
-    # Both paths converge on the evaluator, which gates the human-approval interrupt.
-    builder.add_edge("evaluator", "publish")
-
-    # End
     builder.add_edge("publish", END)
 
     # Compile with checkpointer and interrupt
@@ -158,8 +76,12 @@ def publish_node(state: AgentState) -> dict:
 
     This node runs after human approval (via interrupt_before).
     Saves the report using DocumentMemory in the 'research' namespace.
-    Also maintains legacy reports/ directory for backwards compatibility.
+    The content hash makes retries replace the same archive document.
     """
+    if state.error:
+        raise ValueError(f"Cannot publish a failed run: {state.error}")
+    if state.evaluator_verdict not in {"pass", "needs_human"}:
+        raise ValueError("Evaluator rejected this draft; correct the evidence and regenerate")
     if not state.report_approved:
         return {"error": "Report was not approved"}
 
@@ -168,7 +90,9 @@ def publish_node(state: AgentState) -> dict:
 
     report = state.draft_report
     mode_suffix = "flash" if state.execution_mode == ExecutionMode.FLASH_BRIEFING else "deep"
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+    import hashlib
+
+    timestamp = hashlib.sha256((state.user_id + report.model_dump_json()).encode()).hexdigest()[:16]
 
     # Format report as markdown
     risk_factors = "\n".join(f"- {r}" for r in report.risk_factors)
@@ -222,25 +146,35 @@ def publish_node(state: AgentState) -> dict:
 
     print(f"\n📄 Report saved to document memory: {doc_path}")
 
-    # Also save to legacy reports/ directory for backwards compatibility
-    reports_dir = Path("reports")
-    reports_dir.mkdir(exist_ok=True)
-    filename = f"{report.ticker}_{mode_suffix}_{timestamp}.md"
-    legacy_path = reports_dir / filename
-    legacy_path.write_text(content)
-    print(f"   (Legacy copy: {legacy_path})")
-
     return {
         "report_approved": True,
     }
 
 
+def _restore_tool_surface(expected_tools, tools):
+    if expected_tools is None:
+        return tools
+    available = tool_registry(tools)
+    if tools is not None and set(available) != set(expected_tools):
+        raise ValueError("Retry must preserve the saved tool surface")
+    if not set(expected_tools) <= available.keys():
+        raise ValueError("Retry requires the original custom tools")
+    return [available[name] for name in expected_tools]
+
+
+@serialized_run
 def run_analysis(
     query: str,
     user_id: str = "default",
     thread_id: str | None = None,
     checkpointer: BaseCheckpointSaver | None = None,
     force_mode: ExecutionMode | None = None,
+    *,
+    model_settings: ModelSettings | None = None,
+    tools: list | None = None,
+    profile_loader=None,
+    retry_delivery: bool = False,
+    graph_factory=None,
 ) -> dict:
     """Run a complete stock analysis.
 
@@ -256,38 +190,54 @@ def run_analysis(
     Returns:
         Final state with draft report
     """
-    # Load user profile from Qdrant
-    user_profile = load_user_profile(user_id)
-
-    # Create initial state
-    initial_state = AgentState(
-        messages=[HumanMessage(content=query)],
-        user_profile=user_profile,
-        user_id=user_id,
-        execution_mode=force_mode,  # Will be overwritten by router if None
-    )
-
-    # Create graph (execution_mode is already on initial_state)
-    graph = create_graph(checkpointer=checkpointer)
-
-    # Configure thread
+    graph = (graph_factory or create_graph)(checkpointer=checkpointer)
     thread_id = thread_id or str(uuid.uuid4())
-    config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
-
-    # Run the graph (will pause at publish node for approval)
-    result = graph.invoke(initial_state, config)
+    config: RunnableConfig = {"configurable": {"thread_id": thread_id}, "recursion_limit": 60}
+    saved = graph.get_state(config) if checkpointer else None
+    if saved and saved.values:
+        if not retry_delivery:
+            raise ValueError("Thread already exists; resume it or use a new thread ID for a new turn")
+        if saved.values.get("user_id") != user_id:
+            raise ValueError("Run belongs to a different principal")
+        original = saved.values.get("messages", [])
+        if original and original[0].content != query:
+            raise ValueError("Delivery query differs from the saved run")
+        tools = _restore_tool_surface(saved.values.get("tool_names"), tools)
+        settings = saved.values.get("model_settings") or (model_settings or ModelSettings.from_env()).model_dump()
+        config["configurable"]["model_settings"] = settings
+        if tools is not None:
+            config["configurable"]["tools"] = tools
+        # A queue retry must not cross a human-approval interrupt.
+        result = saved.values if not saved.next or "publish" in saved.next else graph.invoke(None, config, durability="sync" if checkpointer else None)
+    else:
+        settings = model_settings or ModelSettings.from_env()
+        config["configurable"]["model_settings"] = settings.model_dump()
+        if tools is not None:
+            config["configurable"]["tools"] = tools
+        loader = profile_loader or (load_user_profile if checkpointer else lambda _: UserProfile())
+        initial_state = AgentState(
+            messages=[HumanMessage(content=query)],
+            user_profile=loader(user_id),
+            user_id=user_id,
+            execution_mode=force_mode,
+            model_settings=settings.model_dump(),
+            tool_names=list(tool_registry(tools)),
+        )
+        result = graph.invoke(initial_state, config, durability="sync" if checkpointer else None)
     if error := result.get("error"):
         raise RuntimeError(error)
 
     return {
         "thread_id": thread_id,
         "state": result,
+        "needs_revision": result.get("evaluator_verdict") == "fail",
         "draft_report": result.get("draft_report"),
         "execution_mode": result.get("execution_mode"),
-        "requires_approval": checkpointer is not None and not result.get("report_approved", False),
+        "requires_approval": checkpointer is not None and not result.get("report_approved", False) and result.get("evaluator_verdict") != "fail",
     }
 
 
+@serialized_run
 def approve_and_publish(
     thread_id: str,
     checkpointer: BaseCheckpointSaver,
@@ -332,6 +282,10 @@ def approve_and_publish(
 
     print(f"   📍 Resuming from interrupt (next: {next_nodes})")
 
+    if current_state.values.get("evaluator_verdict") not in {"pass", "needs_human"}:
+        raise ValueError("Draft has not passed evaluation; regenerate with sufficient evidence")
+    if current_state.values.get("error"):
+        raise ValueError("Cannot approve a failed run")
     # Apply edits if provided
     update_values: dict[str, object] = {"report_approved": True}
 
@@ -339,13 +293,19 @@ def approve_and_publish(
         draft = DraftReport.model_validate(current_state.values["draft_report"])
         allowed_edits = {key: value for key, value in edits.items() if key in DraftReport.model_fields}
         draft = DraftReport.model_validate({**draft.model_dump(), **allowed_edits})
-        update_values["draft_report"] = draft
+        from market_analyst.runtime.evaluator import evaluate_draft_report
+
+        config["configurable"]["model_settings"] = current_state.values.get("model_settings", {})
+        verdict = evaluate_draft_report(draft, evidence=current_state.values.get("evidence", []), config=config)
+        if verdict.verdict == "fail":
+            raise ValueError("Edited draft failed evaluation")
+        update_values.update(draft_report=draft, evaluator_verdict=verdict.verdict, evaluator_reasons=verdict.reasons)
 
     # Update state and resume
     graph.update_state(config, update_values)
 
     # Resume execution from the interrupt
-    result = graph.invoke(None, config)
+    result = graph.invoke(None, config, durability="sync" if checkpointer else None)
 
     return {
         "thread_id": thread_id,

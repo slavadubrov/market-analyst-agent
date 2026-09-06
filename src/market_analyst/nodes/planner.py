@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 
 from market_analyst.llm import get_structured_model
 from market_analyst.nodes._telemetry import node_callbacks
+from market_analyst.runtime.intervention import raise_if_intervention
 from market_analyst.schemas import AgentState, PlanStep, ResearchData
 
 PLANNER_SYSTEM_PROMPT = """You are a senior investment research analyst at an institutional fund.
@@ -37,7 +38,7 @@ Be specific and actionable. The executor will follow these steps exactly."""
 class PlanOutput(BaseModel):
     """Structured output for the planner."""
 
-    steps: list[PlanStep] = Field(description="Research steps to execute")
+    steps: list[PlanStep] = Field(description="Research steps to execute", min_length=1, max_length=20)
     ticker: str = Field(description="The stock ticker being analyzed")
 
 
@@ -56,7 +57,11 @@ def planner_node(state: AgentState, config: RunnableConfig | None = None) -> dic
     Returns:
         Updated state with plan and research_data initialized
     """
-    structured_llm = get_structured_model(PlanOutput)
+    config = {
+        **(config or {}),
+        "configurable": {**(config or {}).get("configurable", {}), **({"model_settings": state.model_settings} if state.model_settings else {})},
+    }
+    structured_llm = get_structured_model(PlanOutput, config=config)
 
     # Get the last user message
     user_messages = [m for m in state.messages if hasattr(m, "type") and m.type == "human"]
@@ -106,6 +111,7 @@ Consider this profile when planning the analysis."""
             "research_data": research_data,
         }
     except Exception as e:
+        raise_if_intervention(e)
         print(f"\n❌ Planning failed: {str(e)}")
         return {
             "error": f"Planning failed: {str(e)}",

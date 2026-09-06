@@ -5,17 +5,16 @@ are impossible with static tool calls: loops, conditionals, ratio calculations,
 portfolio math. This demonstrates the biggest shift in agent tooling — letting
 agents write code instead of calling schemas one at a time.
 
-For production use, replace this restricted in-process evaluator with a
-process or container sandbox that also enforces CPU and memory limits.
+Calculations run in a disposable restricted Docker container. There is no
+in-process fallback.
 """
 
 import ast
-import builtins
-import io
-import json
-import math
-import statistics
-from contextlib import redirect_stdout
+import os
+import selectors
+import subprocess
+import time
+import uuid
 
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
@@ -56,15 +55,12 @@ _BLOCKED_NODES = (
     ast.With,
 )
 
-_GLOBALS = {"math": math, "json": json, "statistics": statistics}
-_BUILTINS = {name: getattr(builtins, name) for name in _ALLOWED_CALLS}
-_BUILTINS["__import__"] = builtins.__import__
-
 
 class CodeInput(BaseModel):
     """Input schema for the code execution tool."""
 
     code: str = Field(
+        max_length=32768,
         description=(
             "Python code to execute. Use for financial calculations, "
             "ratio analysis, data transformations, or any multi-step "
@@ -122,14 +118,93 @@ def execute_python_analysis(code: str) -> str:
     if error:
         return error
 
-    output = io.StringIO()
-    namespace = {"__builtins__": _BUILTINS, **_GLOBALS}
+    return run_isolated(code)
+
+
+def run_isolated(code: str, *, timeout: float = 10) -> str:
+    """Run in a disposable container with no mounts, network, or host credentials.
+
+    AST checks improve feedback; the container is the isolation boundary. Missing
+    Docker/image fails closed. stdout is capped inside the container and on disk.
+    """
+    name = f"market-calculation-{uuid.uuid4().hex}"
+    image = os.getenv("MARKET_ANALYST_SANDBOX_IMAGE", "python:3.13-alpine")
+    bootstrap = """import sys, resource
+resource.setrlimit(resource.RLIMIT_CPU, (3, 3))
+resource.setrlimit(resource.RLIMIT_FSIZE, (65536, 65536))
+class Output:
+    remaining = 16384
+    def write(self, text):
+        if len(text) > self.remaining:
+            raise RuntimeError('output limit exceeded')
+        self.remaining -= len(text)
+        return sys.__stdout__.write(text)
+    def flush(self):
+        sys.__stdout__.flush()
+sys.stdout = sys.stderr = Output()
+exec(compile(sys.stdin.read(), '<analysis>', 'exec'), {})
+"""
+    command = [
+        "docker",
+        "run",
+        "--rm",
+        "--pull=never",
+        "--name",
+        name,
+        "--network=none",
+        "--read-only",
+        "--cap-drop=ALL",
+        "--security-opt=no-new-privileges",
+        "--memory=128m",
+        "--memory-swap=128m",
+        "--cpus=0.5",
+        "--pids-limit=16",
+        "--user=65534:65534",
+        "--log-driver=none",
+        "-i",
+        image,
+        "python",
+        "-I",
+        "-B",
+        "-c",
+        bootstrap,
+    ]
     try:
-        with redirect_stdout(output):
-            exec(compile(code, "<analysis>", "exec"), namespace)  # noqa: S102
-    except Exception as exc:
-        return f"Error: {type(exc).__name__}: {exc}"
-    result = output.getvalue().rstrip()
-    if not result:
-        return "(Code executed successfully but produced no output. Use print() to return results.)"
-    return result
+        process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        assert process.stdin is not None and process.stdout is not None
+        try:
+            process.stdin.write(code.encode())
+            process.stdin.close()
+            output = bytearray()
+            deadline = time.monotonic() + timeout
+            with selectors.DefaultSelector() as selector:
+                selector.register(process.stdout, selectors.EVENT_READ)
+                while True:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0 or not selector.select(remaining):
+                        raise subprocess.TimeoutExpired(command, timeout)
+                    chunk = os.read(process.stdout.fileno(), 4096)
+                    if not chunk:
+                        break
+                    output.extend(chunk)
+                    if len(output) > 16384:
+                        return "Error: output limit exceeded"
+            process.wait(timeout=max(0.01, deadline - time.monotonic()))
+            text = output.decode(errors="replace").strip()
+            if process.returncode:
+                return f"Error: isolated calculation failed: {text}"
+            return text or "(Code executed successfully but produced no output.)"
+        finally:
+            if process.poll() is None:
+                process.kill()
+            process.wait()
+            process.stdout.close()
+    except subprocess.TimeoutExpired:
+        return "Error: isolated calculation timed out"
+    except OSError:
+        return "Blocked: Docker sandbox is unavailable"
+    finally:
+        try:
+            subprocess.run(["docker", "rm", "-f", name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5, check=False)
+        except (OSError, subprocess.TimeoutExpired):
+            pass

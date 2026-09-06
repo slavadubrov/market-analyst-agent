@@ -1,469 +1,227 @@
 # Market Analyst Agent
 
-> **DISCLAIMER**: This is a **demo project for educational purposes only**, created for the **["Engineering the Agentic Stack"](https://slavadubrov.github.io/blog/#engineering-the-agentic-stack)** article series. Do NOT use this for actual trading or investment decisions. The trading functionality is **simulated** (no real trades are executed) and the analysis should not be considered financial advice.
+Learn how an agent turns a request into tool calls, evidence, a draft, and a review decision. This is the runnable companion to **Engineering the Agentic Stack**. Trading is simulated; the reports are educational examples, not investment advice.
 
-An **Autonomous Investment Research Agent** demonstrating production-ready agentic patterns. This repo is the hands-on companion to the six-part blog series, covering **reasoning loops**, **memory**, **tool use**, **security**, **runtime**, and **harness engineering** in a realistic market research context.
+Start with the offline example. It uses the real workflow and checkpoint machinery with synthetic data, so you can understand the control flow before configuring providers or databases.
 
-## What This Project Demonstrates
+## Start in three commands
 
-This project implements the six layers covered by the series:
-
-| Dimension | What's Implemented | Article |
-|-----------|-------------------|---------|
-| **Reasoning loops** | ReAct, ReWOO, Plan-and-Execute, Router | [Part 1: AI Agent Reasoning Loops: ReAct, ReWOO, Plan-and-Execute](https://slavadubrov.github.io/blog/2026/01/31/ai-agent-reasoning-loops/) |
-| **Memory** | Hot (PostgreSQL), Cold (Qdrant), Document (file-based) | [Part 2: AI Agent Memory Architecture: Checkpoints and Vector Stores](https://slavadubrov.github.io/blog/2026/02/14/ai-agent-memory-architecture/) |
-| **Tool use** | JSON Tool Calling, MCP, Skills, CLI-as-Tool, Code Execution | [Part 3: AI Agent Tool Use: MCP, CLI, Skills, and Code Execution](https://slavadubrov.github.io/blog/2026/03/24/ai-agent-tool-use/) |
-| **Security** | Policy checks, HITL escalation, sandboxing, scoped credentials | [Part 4: AI Agent Security: Permissions, Sandboxes, and MCP Threats](https://slavadubrov.github.io/blog/2026/04/20/ai-agent-security/) |
-| **Runtime** | Sessions, sandboxes, checkpoints, traces, queue + worker | [Part 5: Long-Running AI Agent Runtime: Sessions and Checkpoints](https://slavadubrov.github.io/blog/2026/05/26/ai-agent-runtime/) |
-| **Harness** | Run lifecycle, progress handoffs, replay protection, acceptance checks | [Part 6: Harness Engineering for AI Agents: Designing Control Loops](https://slavadubrov.github.io/blog/2026/07/22/ai-agent-harness-engineering/) |
-
----
-
-## Architecture
-
-### Reasoning Loops (Part 1)
-
-The agent supports multiple reasoning strategies, selected automatically by a **Router** or forced via `--mode`:
-
-| Mode | Pattern | How It Works | Best For |
-|------|---------|-------------|----------|
-| **Deep** | Plan-and-Execute + ReAct | Planner breaks task into steps, Executor runs each step with a Thought-Action-Observation loop | Comprehensive multi-source analysis |
-| **Flash** | ReWOO | Planner generates all tool calls upfront, Worker executes in parallel, Solver synthesizes once | Quick market snapshots |
-| **Auto** | Router | LLM classifies query intent and selects Deep or Flash automatically | Default — lets the agent decide |
-
-**Key Difference:**
-- **ReAct** (Deep): LLM thinks -> calls tool -> observes -> thinks -> calls tool... (flexible but expensive)
-- **ReWOO** (Flash): LLM plans all tools -> executes in parallel -> synthesizes once (fast and token-efficient)
-
-### Memory Architecture (Part 2)
-
-Three-tier memory system with different retention policies:
-
-| Tier | Technology | Purpose | Retention |
-|------|-----------|---------|-----------|
-| **Hot Memory** | PostgreSQL + LangGraph checkpointing | Pause/resume execution, crash recovery | 90 days |
-| **Cold Memory** | Qdrant vector database | User profiles, preferences, semantic search | 365 days |
-| **Document Memory** | File-based JSON with namespaces | Report archives, conventions, learnings | 730 days |
-
-```
-memory/documents/
-├── research/          # Analysis reports (published after HITL approval)
-├── conventions/       # Established patterns (e.g., report formatting)
-├── learnings/         # Episodic knowledge (successful strategies)
-└── user-profiles/     # User preferences (complementary to Qdrant)
-```
-
-### Tool Modalities (Part 3)
-
-The agent demonstrates **five tool interface patterns**, following [ACI (Agent-Computer Interface)](https://arxiv.org/abs/2405.15793) design principles:
-
-| # | Modality | Implementation | Tools | Token Overhead |
-|---|----------|---------------|-------|---------------|
-| 1 | **JSON Tool Calling** | `@tool` + Pydantic schemas | `get_stock_snapshot`, `get_price_history`, `get_financials`, `search_news`, `search_competitors` | ~4,500 tokens (5 tool schemas) |
-| 2 | **MCP** | Sidecar exposing a curated tool surface | Market-data and search tools in `mcp_server/` | Varies with exposed schemas |
-| 3 | **Skills (SKILL.md)** | Markdown files with YAML frontmatter | `use_skill` -> `earnings_analysis`, `sector_comparison` playbooks | ~100 tokens (metadata only at startup) |
-| 4 | **CLI-as-Tool** | Subprocess wrapper around own CLI | `cli_list_reports`, `cli_show_report` (agent calls `market-analyst --json`) | Near zero (no schema) |
-| 5 | **Code Execution (PTC)** | `PythonAstREPLTool` with safety guards | `execute_python_analysis` for ratio calculations, CAGR, portfolio math | ~200 tokens (1 tool schema) |
-
-**ACI Design Principles Applied:**
-- **Tool consolidation**: 10+ granular tools -> 5 high-level tools (62% schema reduction)
-- **Pydantic validation**: Input guardrails catch bad tickers/periods before API calls
-- **Structured outputs**: Every tool returns a model with a `summary` field ready for reports
-- **Retry logic**: Tenacity decorators with exponential backoff on all external API calls
-
-### Workflows
-
-**1. Analysis Workflow** — Router -> [ReAct or ReWOO] -> Reporter/Solver -> Evaluator -> Publish (with HITL approval)
-
-![Analysis Workflow](docs/analysis_workflow.svg)
-
-**2. Trade Workflow** — Guardian policy engine -> Auto-approve / Escalate to Compliance Officer / Reject
-
-![Trade Workflow](docs/trade_workflow.svg)
-
-**3. Combined Workflow** — Analysis -> Evaluator -> Report Approval -> Create Trade -> Guardian -> Trade Execution
-
-![Combined Workflow](docs/combined_workflow.svg)
-
----
-
-## Getting Started
-
-### Prerequisites
-
-- Python 3.13+
-- [uv](https://github.com/astral-sh/uv) package manager
-- Docker & Docker Compose (for persistence features)
-
-### Step 1: Get Your API Keys
-
-#### Model API Key
-
-Configure either `OPENAI_API_KEY` from [platform.openai.com](https://platform.openai.com/api-keys) or `ANTHROPIC_API_KEY` from [console.anthropic.com](https://console.anthropic.com/). When both are present, the default `auto` provider uses OpenAI; set `MARKET_ANALYST_PROVIDER=anthropic` to force Claude.
-
-Both providers require API billing; ChatGPT and Claude subscriptions do not include API usage.
-
-#### Tavily API Key (Web Search)
-
-1. Go to [tavily.com](https://tavily.com/)
-2. Sign up for a free account
-3. Navigate to your [API Keys dashboard](https://app.tavily.com/home)
-4. Copy your API key
-5. Save this as `TAVILY_API_KEY`
-
-> **Note**: Tavily's free tier includes 1,000 API calls/month — plenty for development.
-
-### Step 2: Development Setup
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/), then from this checkout:
 
 ```bash
-# Setup virtual environment and install dependencies
-make setup
-make install
-
-# Run tests
-make test
-
-# Format and lint code
-make format
-make lint
-
-# Start databases (Postgres, Qdrant, Redis)
-make db-up
-
-# Stop databases
-make db-down
+uv sync --locked
+uv run python examples/offline.py
+uv run pytest
 ```
 
-If you don't have `make` installed, you can run the commands directly using `uv` or `docker compose` (see Makefile for details).
+Python 3.13+ is required; uv can install the project's Python version. The example needs no keys, Docker, or network calls after installation. It executes an injected quote tool, saves a checkpoint, retries the same run without repeating the tool, and stops before publication. Planning and report writing are deterministic fixtures, not model-quality evaluations.
 
-### Step 3: Configure Environment Variables
+The default tests are offline. Integration tests are explicitly enabled below.
+
+## Run with a model
 
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env` with your API keys:
+Set `OPENAI_API_KEY` and, for news searches, `TAVILY_API_KEY`. Restart the CLI/worker process after changing `.env`; restart the Gradio server for UI changes. Do not put credentials in run settings or commit `.env`.
 
 ```bash
-ANTHROPIC_API_KEY=sk-ant-api03-xxxxxxxxxxxxx
-# Or use OpenAI (preferred when both keys are present):
-OPENAI_API_KEY=sk-xxxxxxxxxxxxx
-TAVILY_API_KEY=tvly-xxxxxxxxxxxxx
-
-# PostgreSQL (defaults work with docker-compose)
-POSTGRES_HOST=localhost
-POSTGRES_PORT=5432
-POSTGRES_DB=market_analyst
-POSTGRES_USER=analyst
-POSTGRES_PASSWORD=analyst_pass
-
-# Qdrant (defaults work with docker-compose)
-QDRANT_HOST=localhost
-QDRANT_PORT=6333
+uv run market-analyst "Give a short NVDA briefing" --mode flash --no-persist
+uv run market-analyst "Research NVDA" --mode deep --model gpt-5.6-sol --no-persist
 ```
 
-### Step 4: Start Infrastructure
+`--no-persist` disables database access and publication. It uses a default profile, still writes local progress/debug artifacts, and returns a draft with an evaluator verdict. A failed verdict means the draft needs revision, even if every API request succeeded.
+
+For a small live smoke test that only needs a model key and Yahoo Finance:
 
 ```bash
-docker compose -f docker/docker-compose.yml --env-file .env up -d postgres qdrant redis
+uv run python scripts/live_smoke.py --mode flash
+uv run python scripts/live_smoke.py --mode deep
 ```
 
----
+These make real API calls. They check execution and evidence collection; they do not assert that the report passes editorial review.
 
-## Usage
+### Choose a provider or deployment
 
-### Basic Analysis
+| Setting | Behavior |
+| --- | --- |
+| `MARKET_ANALYST_PROVIDER=auto` | Default: OpenAI if its key exists, otherwise Anthropic |
+| `MARKET_ANALYST_PROVIDER=openai` | Direct OpenAI Responses API; default model `gpt-5.6-luna` |
+| `MARKET_ANALYST_PROVIDER=anthropic` | Direct Anthropic adapter; set `ANTHROPIC_API_KEY` |
+| `MARKET_ANALYST_PROVIDER=compatible` | OpenAI Chat Completions interface for LiteLLM or another compatible endpoint |
+| `MARKET_ANALYST_MODEL` | Provider model ID or gateway deployment name; `--model` overrides it |
 
-```bash
-# Quick test without databases
-uv run market-analyst "Analyze NVDA stock" --no-persist
+Arbitrary names such as `o3` or `team/research-model` are preserved. Historical `sonnet` and `haiku` aliases still work. Models must support tool calling and structured responses; an OpenAI-shaped endpoint alone does not establish feature parity.
 
-# Full mode with persistence
-uv run market-analyst "Analyze NVDA stock"
+**LiteLLM connection:** configure your gateway, then set:
 
-# Force a specific reasoning mode
-uv run market-analyst "Analyze NVDA stock" --mode deep    # ReAct (thorough)
-uv run market-analyst "NVDA price update" --mode flash    # ReWOO (fast)
-
-# Choose model
-uv run market-analyst "Analyze NVDA stock" --model haiku  # Faster, cheaper
-uv run market-analyst "Analyze NVDA stock" --model sonnet # More powerful
+```dotenv
+MARKET_ANALYST_PROVIDER=compatible
+MARKET_ANALYST_BASE_URL=http://localhost:4000/v1
+MARKET_ANALYST_API_KEY=your-gateway-key
+MARKET_ANALYST_MODEL=research-model
 ```
 
-### User Profiles
+The application's existing OpenAI client can [connect directly to LiteLLM](https://docs.litellm.ai/docs/proxy/user_keys). No embedded LiteLLM dependency is needed. The gateway owns upstream credentials and model routing. Its key is separate from `OPENAI_API_KEY`, so selecting a gateway does not send your OpenAI credential to it.
 
-```bash
-# Set risk tolerance (persists in Qdrant)
-uv run market-analyst --set-profile --risk-tolerance conservative --horizon long
+Direct OpenAI requests retain encrypted reasoning blocks with `store=False`. The ReAct loop uses `langchain.agents.create_agent`; context compaction summarizes older messages while preserving recent tool-call/result pairs. Full tool evidence is collected separately from the model context. The compatible transport uses Chat Completions and does not promise OpenAI-specific reasoning features.
 
-# Future analyses will consider this profile
-uv run market-analyst "Analyze AAPL stock"
+## Follow the code
+
+```mermaid
+flowchart LR
+    Request --> Router
+    Router --> Planner
+    Planner --> ReAct[ReAct step executor]
+    ReAct --> ReAct
+    ReAct --> Reporter
+    Router --> ReWOO[ReWOO planner]
+    ReWOO --> Tools[Dependency-ordered tools]
+    Tools --> Solver
+    Reporter --> Evaluator
+    Solver --> Evaluator
+    Evaluator --> Review[Human review]
+    Review --> Archive[Document archive]
 ```
 
-### Pause, Resume, and Approve
+Any workflow error stops the path before publication. An evaluator `fail` cannot be approved; fix the evidence and start a new run. `needs_human` is explicitly reviewed by the operator. Approval writes a local archive document; it does not publish to a website.
 
-```bash
-# Start an analysis (Ctrl+C to pause)
-uv run market-analyst "Deep analysis of semiconductor sector"
+| Module | Read it to learn |
+| --- | --- |
+| `harness.py` | How model, tools, profile loader, checkpoint store, and graph factory are composed |
+| `llm.py` | Immutable run settings and provider adapters |
+| `workflows/research.py` | Shared wiring for the two reasoning loops; node replacement for experiments |
+| `nodes/` | One readable function per planning, execution, writing, or policy decision |
+| `tools/registry.py` | The research tool allowlist shared by both loops |
+| `runtime/evidence.py`, `runtime/evaluator.py` | Actual tool evidence, freshness checks, and separate report judgment |
+| `memory/` | Checkpoints, exact-match profiles in Qdrant, and a JSON document archive |
+| `runtime/queue.py`, `runtime/worker.py` | Redis delivery, pending reclamation, bounded retries, and dead letters |
+| `runtime/ownership.py`, `runtime/idempotency.py` | One active writer and durable operation reservation/reconciliation |
+| `tools/code_exec.py` | Restricted Docker execution with no local fallback |
+| `mcp_server/` | Optional tool server for external MCP clients |
 
-# Resume later
-uv run market-analyst --resume --thread-id <thread-id>
+Deep mode is **Plan-and-Execute with a ReAct loop inside each step**. Flash mode is **ReWOO**: plan tool calls first, execute dependency-ready calls, then synthesize. Auto mode asks the router to choose. These are control-flow choices, not a claim that one is generally better.
 
-# Approve a draft report
-uv run market-analyst --approve --thread-id <thread-id>
+## Change one component
+
+Use ordinary constructor arguments rather than editing environment variables inside your code:
+
+```python
+from langgraph.checkpoint.memory import InMemorySaver
+from market_analyst.harness import AgentHarness
+from market_analyst.llm import ModelSettings
+from market_analyst.schemas import ExecutionMode
+from market_analyst.tools.stock import get_stock_snapshot
+
+agent = AgentHarness(
+    model=ModelSettings(provider="openai", model="gpt-5.6-luna"),
+    tools=(get_stock_snapshot,),
+    checkpointer=InMemorySaver(),
+)
+result = agent.run(
+    "Fetch a NVDA snapshot",
+    thread_id="example-1",
+    mode=ExecutionMode.FLASH_BRIEFING,
+)
 ```
 
-### Document Memory
+- **Tool:** supply a LangChain `@tool` with validated arguments. Both loops use the same supplied list. ReWOO rejects unknown tools, duplicate IDs, missing dependencies, cycles, and oversized plans before execution. Add effectful operations only behind an explicit approval/idempotency boundary; the research list deliberately excludes trades.
+- **Reasoning:** choose `mode`, replace a named node with `partial(create_graph, nodes={...})`, or supply a different `graph_factory(checkpointer=...)`. `examples/offline.py` demonstrates node replacement. Keep the `AgentState` and approval contract when using the existing runner.
+- **Profile memory:** pass `profile_loader=my_store.get_profile`. The default harness uses `UserProfile()`; pass a Qdrant loader explicitly when needed.
+- **Checkpoint memory:** pass `InMemorySaver()` for a single-process lesson or `get_checkpointer()` for Postgres/Redis. In-memory checkpoints disappear when the process exits.
+- **Model:** change `ModelSettings`. Settings and the permitted tool names are saved with the run. Recovery preserves them; custom tools must be supplied again, and the tool surface cannot silently expand.
+
+A new user turn uses a new thread ID. Retrying a delivery uses `retry=True` with the same request, principal, tools, and graph implementation. A queue retry never approves a report.
+
+## Persistence and review
+
+Start only the services you need:
 
 ```bash
-# List all saved reports
-uv run market-analyst --list-reports
-
-# JSON output (for machine consumption / CLI-as-Tool modality)
+make db-up
+uv run market-analyst "Research NVDA" --mode flash
+uv run market-analyst --resume --thread-id <id>
+uv run market-analyst --approve --thread-id <id>
 uv run market-analyst --list-reports --json
-
-# Search reports by ticker
-uv run market-analyst --search-reports "NVDA"
-
-# Display a specific report
-uv run market-analyst --show-report "NVDA_deep_2024-01-15_143022"
 ```
 
-### Guardian Trade Workflow
+The default checkpoint backend is PostgreSQL. `HOT_MEMORY_PROVIDER=redis` selects Redis Stack. An unavailable database is an error; use `--no-persist` explicitly for a draft-only run.
 
-> **All trades are simulated** — no real trades are executed.
+`CHECKPOINT_ENCRYPTION_KEY` enables checkpoint encryption with PostgreSQL. The installed Redis saver does not support this serializer; selecting Redis with an encryption key fails explicitly.
+
+Profiles in Qdrant are exact-match preferences, with placeholder vectors. This is **not semantic recall**. Reads and vector queries require a principal filter and exclude expired records. `delete_profile(user_id)` deletes that principal's records; `purge_expired()` removes expired records physically. Existing profiles without an expiry must be saved again before use. No automatic retention scheduler is claimed.
+
+Reports are written atomically to `memory/documents/research/`, using a stable content key so retries do not create another archive record. The former second copy in `reports/` is no longer written. Workspace paths are directories, not sandboxes.
+
+This is a local operator demo: user IDs are scoping inputs, not authenticated identities. Add authentication and ownership checks before exposing its UI or archive to other users.
+
+### Queue recovery
 
 ```bash
-# Low-value trade (auto-approved by Guardian)
-uv run market-analyst --trade --action buy --ticker NVDA --amount 300
-
-# High-value trade (escalated to human)
-uv run market-analyst --trade --action buy --ticker NVDA --amount 50000
-uv run market-analyst --approve-trade --thread-id <thread-id>
-
-# Dangerous action (auto-rejected by Guardian)
-uv run market-analyst --trade --action delete_logs --ticker NVDA --amount 0
+make queue-push
+make worker
 ```
 
-### Combined Workflow (Full Demo)
+The worker reclaims pending entries idle for 60 seconds, resumes committed checkpoints with synchronous durability, and acknowledges successful terminal outcomes or a durable approval wait. Failed deliveries are retried up to three deliveries, then recorded and acknowledged atomically in `<stream>:dead`. Provider intervention goes directly to operator review through the dead-letter record, without another model attempt.
+
+A kernel lock prevents simultaneous writers on the same shared local workspace volume. This supports multiple local processes, not multiple machines or independent container volumes. New input/approval is rejected while a writer is active. SIGTERM finishes the current job; SIGINT in the CLI interrupts it. Use PostgreSQL leases with fencing and an explicit cancellation service before scaling across hosts.
+
+The simulated trade ledger uses SQLite. An application-owned operation ID is bound to the full approved parameters. Completed operations replay; `pending` and `unknown` stop for reconciliation. A crash after an effect but before recording its result never grants permission to repeat it. An operator can record a result confirmed by an external status lookup with `store(...)`. Legacy JSON reservations are not silently migrated or replayed.
+
+### Simulated trades and UI
 
 ```bash
-# Analysis -> Evaluator -> Report Approval -> Create Trade -> Guardian -> Trade
-uv run market-analyst "Analyze NVDA for investment" --combined --trade-amount 5000
-```
-
-### Web Interface
-
-```bash
+uv run market-analyst --trade --action buy --ticker NVDA --amount 300 --no-persist
+uv run market-analyst --trade --action buy --ticker NVDA --amount 5000
+uv run market-analyst --approve-trade --thread-id <id>
+uv run market-analyst "Research NVDA" --combined --trade-amount 1000
 make run-ui
-# Opens at http://localhost:7860
 ```
 
----
+Guardian auto-approves amounts up to $500, escalates larger amounts, and rejects destructive actions. Combined mode requires persistence and report approval before creating a simulated trade request.
 
-## Project Structure
+## Optional execution surfaces
 
-```
-src/market_analyst/
-├── nodes/
-│   ├── router.py              # Intent classification (deep vs flash)
-│   ├── planner.py             # Research plan generation (ReAct path)
-│   ├── executor.py            # Step execution with ReAct loop
-│   ├── rewoo_planner.py       # Upfront tool planning (ReWOO path)
-│   ├── rewoo_worker.py        # Parallel tool execution
-│   ├── rewoo_solver.py        # Result synthesis
-│   ├── reporter.py            # Report generation
-│   ├── guardian.py            # Policy-as-Code safety layer
-│   └── trade_executor.py      # Simulated, idempotent trade execution
-├── tools/
-│   ├── stock.py               # JSON tools: get_stock_snapshot, get_price_history, get_financials
-│   ├── search.py              # JSON tools: search_news, search_competitors
-│   ├── trade.py               # JSON tools: execute_trade
-│   ├── skills.py              # Skills modality: SKILL.md loader + use_skill tool
-│   ├── cli_tools.py           # CLI modality: cli_list_reports, cli_show_report
-│   └── code_exec.py           # Code execution modality: execute_python_analysis
-├── workflows/
-│   ├── analysis_workflow.py   # Main analysis graph
-│   ├── trade_workflow.py      # Guardian + HITL trade graph
-│   └── combined_workflow.py   # End-to-end chained workflow
-├── runtime/
-│   ├── evaluator.py           # Fresh-context report evaluator
-│   ├── queue.py               # Redis Streams queue producer/consumer helpers
-│   ├── worker.py              # Background worker loop
-│   └── harness.py             # Runtime wrapper for CLI and worker runs
-├── memory/                    # Hot, cold, and document memory implementations
-├── mcp_server/                # MCP sidecar exposing data tools
-├── observability/             # OTel tracing, metrics, and budget callbacks
-├── schemas.py                 # Pydantic state models
-├── cli.py                     # CLI entry point
-└── app.py                     # Gradio web UI
-skills/
-├── earnings_analysis.md       # Earnings analysis playbook (SKILL.md format)
-└── sector_comparison.md       # Sector comparison framework
-```
-
----
-
-## Article Series: "Engineering the Agentic Stack"
-
-| Article | Concepts | Demo Implementation |
-|---------|----------|---------------------|
-| [**Part 1: AI Agent Reasoning Loops: ReAct, ReWOO, Plan-and-Execute**](https://slavadubrov.github.io/blog/2026/01/31/ai-agent-reasoning-loops/) | ReAct vs ReWOO vs Plan-and-Execute | `router.py` -> `planner.py` + `executor.py` (ReAct) or `rewoo_*.py` (ReWOO) |
-| [**Part 2: AI Agent Memory Architecture: Checkpoints and Vector Stores**](https://slavadubrov.github.io/blog/2026/02/14/ai-agent-memory-architecture/) | Checkpoints, vector stores, and file-based memory | PostgreSQL (hot), Qdrant (cold), DocumentMemory (file-based) |
-| [**Part 3: AI Agent Tool Use: MCP, CLI, Skills, and Code Execution**](https://slavadubrov.github.io/blog/2026/03/24/ai-agent-tool-use/) | JSON tool calling, MCP, Skills, CLI, code execution, and ACI design | `tools/`, `skills/`, and `mcp_server/` |
-| [**Part 4: AI Agent Security: Permissions, Sandboxes, and MCP Threats**](https://slavadubrov.github.io/blog/2026/04/20/ai-agent-security/) | Permissions, policy checks, sandboxes, HITL, and MCP scoping | `guardian.py` + `trade_workflow.py` |
-| [**Part 5: Long-Running AI Agent Runtime: Sessions and Checkpoints**](https://slavadubrov.github.io/blog/2026/05/26/ai-agent-runtime/) | Sessions, sandboxes, checkpoints, traces, and deployment patterns | `observability/`, `runtime/`, `docker/observability/`, and `runtime/worker.py` |
-| [**Part 6: Harness Engineering for AI Agents: Designing Control Loops**](https://slavadubrov.github.io/blog/2026/07/22/ai-agent-harness-engineering/) | Context, tool dispatch, progress handoffs, replay protection, and acceptance checks | `runtime/harness.py`, `runtime/initializer.py`, `runtime/idempotency.py`, and `runtime/evaluator.py` |
-
----
-
-## Configuration Reference
-
-| Variable | Required | Description | Default |
-|----------|----------|-------------|---------|
-| `ANTHROPIC_API_KEY` | One provider required | Anthropic API key for Claude | - |
-| `OPENAI_API_KEY` | One provider required | OpenAI API key; preferred when both keys are set | - |
-| `MARKET_ANALYST_PROVIDER` | No | `auto`, `openai`, or `anthropic` | `auto` |
-| `TAVILY_API_KEY` | Yes | Tavily API key for web search | - |
-| `POSTGRES_HOST` | No | PostgreSQL host | `localhost` |
-| `POSTGRES_PORT` | No | PostgreSQL port | `5432` |
-| `POSTGRES_DB` | No | PostgreSQL database name | `market_analyst` |
-| `POSTGRES_USER` | No | PostgreSQL username | `analyst` |
-| `POSTGRES_PASSWORD` | No | PostgreSQL password | `analyst_pass` |
-| `QDRANT_HOST` | No | Qdrant host | `localhost` |
-| `QDRANT_PORT` | No | Qdrant port | `6333` |
-
----
-
-## Parts 5 and 6: Runtime and Harness Engineering
-
-Part 5 covers the infrastructure under the agent loop: durable sessions,
-crash-safe checkpoints, sandboxes, traces, and replaceable workers. Part 6
-opens the harness that drives the loop, preserves progress, controls retries,
-and decides whether the result has enough evidence to count as complete.
-
-### Runtime primitives (Part 5)
-
-| Primitive | Where it lives in this repo |
-|-----------|------------------------------|
-| **Session** | LangGraph `thread_id` + PostgreSQL `PostgresSaver` (`src/market_analyst/memory/postgres_store.py`) |
-| **Harness** | `runtime/harness.py` + the LangGraph `StateGraph` in `workflows/` |
-| **Sandbox** | Per-thread workspace at `./workspaces/${THREAD_ID}` (`runtime/workspace.py`) |
-| **Checkpoint** | Same `PostgresSaver`, optionally wrapped with `EncryptedSerializer` |
-| **Trace** | OpenTelemetry GenAI spans emitted by `observability/langchain_callback.py` |
-
-### Runtime and harness safeguards
-
-| Failure mode | Where the mitigation lives |
-|--------------|----------------------------|
-| Premature completion | `runtime/evaluator.py` — fresh-context evaluator subagent (default-FAIL) |
-| Stuck loops / retry storms | `observability/budget.py` — circuit breaker on consecutive tool errors |
-| Runaway token / tool cost | `observability/budget.py` — per-run token + tool-call budgets + kill switch |
-| Non-idempotent tool calls | `runtime/idempotency.py` — filesystem-backed key store; trade executor uses it |
-| Lost work after crash | LangGraph PostgresSaver checkpoint + `runtime/initializer.py` boot hook |
-| Workspace drift | Per-`thread_id` workspace mount |
-| Feature amnesia across context windows | `PROGRESS.md` + `feature-list.json` via `runtime/initializer.py` |
-
-### Observability stack
+**Calculations:** start Docker Desktop and explicitly prepare the image:
 
 ```bash
-# Bring up OTel Collector + Tempo + Loki + Prometheus + Grafana
-make observability-up
-
-# Then point the worker at the collector
-export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
-export METRICS_ENABLED=true
-uv run market-analyst "Analyze NVDA stock"
+docker pull python:3.13-alpine
 ```
 
-Grafana lands on http://localhost:3000 (anonymous admin, dev only) with a
-preloaded *Market Analyst — Overview* dashboard. Prometheus is on :9090,
-Tempo on :3200, Loki on :3100. Alert rules in
-`docker/observability/alerts.yml` cover budget-kill triggers, tool-error
-rate, and slow LLM calls.
+The calculator runs as a non-root user in a read-only container with no host mounts, no network, no capabilities, no host credentials, CPU/memory/PID limits, a wall-time limit, and bounded output. Missing Docker/image fails closed. Set `MARKET_ANALYST_SANDBOX_IMAGE` to a vetted digest for reproducible deployments. AST validation only improves error messages; it is not the isolation boundary. The app container has no Docker socket; calculation calls from that container consequently fail closed.
 
-Span attributes follow the OpenTelemetry [GenAI semantic conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/)
-(`gen_ai.operation.name`, `gen_ai.provider.name`, `gen_ai.request.model`,
-`gen_ai.conversation.id` = the LangGraph `thread_id`, etc.).
+**MCP:** `uv run python -m market_analyst.mcp_server` serves stdio. `make mcp-up` exposes Streamable HTTP on localhost:8765. This is an optional server for external clients. The worker calls local tools and has its own credentials; the sidecar is **not a secret broker or isolation boundary**. The checked SDK negotiates protocol `2025-11-25` and exposes five read tools, no trade or code-execution tools.
 
-### MCP sidecar (secret-broker pattern)
+**Observability:** `make observability-up` starts the optional OTel/Grafana stack. Metrics are observations, not spending authorization. Model timeout, response-token caps, plan-size limits, and graph iteration limits are enforced. The `BudgetTracker` lesson is post-call accounting; a durable reservation/settlement ledger for a hard run-wide token or money limit remains a separate operating contract.
+
+## Verify changes
 
 ```bash
-# Bring up the sidecar that holds API tokens; the worker calls it via MCP
-make mcp-up
+make format                 # Ruff import sorting/fixes, then formatting
+make check                  # Ruff lint + format check, mypy, offline pytest
+uv run python examples/offline.py
+uv build
+
+# Docker required; creates and removes isolated Redis/Postgres/Python containers
+uv run pytest -m integration
 ```
 
-The sidecar (`src/market_analyst/mcp_server/`) re-exposes the data tools
-(`get_stock_snapshot`, `search_news`, …) over MCP. Production deployments
-pull tokens from Vault / AWS Secrets Manager into the sidecar; the worker
-container never sees them.
+The tests cover invalid tool plans, full JSON evidence, unsupported reports, principal isolation/deletion, concurrent operation reservations, a killed Redis consumer, PostgreSQL recovery after process death, provider stop handling, compaction, and MCP negotiation. Live requests are confined to the explicit smoke script.
 
-### Queue + worker shape (article §"Queue + Worker + Checkpoint DB")
+The GitHub Actions workflow runs the same checks and Docker integration tests without API keys.
 
-```bash
-# Producer: any CLI invocation
-# Consumer: a dedicated worker loop on Redis Streams
-make worker          # starts python -m market_analyst.runtime.worker
-make queue-push      # XADDs one test job onto market_analyst:runs
-```
+Evaluator verdicts remain model judgments, not objective correctness certificates.
 
-`runtime/queue.py` and `runtime/worker.py` implement the queue half. The
-worker uses the same `harness_run` context the CLI uses, so a crashed
-worker writes the same debug bundle to `./workspaces/${THREAD_ID}/_debug/`
-that the CLI would.
+## Companion articles
 
-### Debug bundle on failure
+| Part | Article | Main code |
+| --- | --- | --- |
+| 1 | [Reasoning loops](https://slavadubrov.com/blog/2026/01/31/ai-agent-reasoning-loops/) | `workflows/research.py`, `nodes/` |
+| 2 | [Memory](https://slavadubrov.com/blog/2026/02/14/ai-agent-memory-architecture/) | `memory/`, checkpoint recovery |
+| 3 | [Tools](https://slavadubrov.com/blog/2026/03/24/ai-agent-tool-use/) | `tools/`, `mcp_server/` |
+| 4 | [Security](https://slavadubrov.com/blog/2026/04/20/ai-agent-security/) | Guardian, ownership, sandbox, evidence gates |
+| 5 | [Runtime](https://slavadubrov.com/blog/2026/05/26/ai-agent-runtime/) | queue, worker, checkpoints, observability |
+| 6 | [Harness engineering](https://slavadubrov.com/blog/2026/07/22/ai-agent-harness-engineering/) | `harness.py`, evaluator, fault tests |
 
-On any uncaught exception the harness drops a debug bundle:
-
-```
-workspaces/<thread_id>/_debug/
-├── last_state.json
-├── error.txt
-├── tool_calls.csv
-├── env.txt
-├── workspace.tar.gz
-└── PROGRESS.md
-```
-
-The CLI prints the bundle path on failure — that bundle is what you'd hand
-to an oncall engineer (or another agent) when investigating a long-run
-failure.
-
-### What has to change before this goes to production
-
-(From the article's "What Has to Change Before This Goes to Production" list.)
-
-1. Move database passwords out of `.env` and into a secrets manager.
-2. Replace Grafana's anonymous admin with OAuth / SAML.
-3. Enable TLS between every hop that crosses a trust boundary.
-4. Pin CPU/RAM limits per service and tune Postgres `shared_buffers`.
-5. Wire `pg_basebackup` / `wal-g`; ship Qdrant snapshots to object storage.
-6. Mount one volume per `thread_id` (or hand the workspace to a per-task
-   Daytona / Runloop sandbox).
-7. Move MCP tokens into Vault; the sidecar fetches per session.
-8. Set `CHECKPOINT_ENCRYPTION_KEY` and `LANGGRAPH_STRICT_MSGPACK=true` for
-   the Postgres checkpointer.
-
----
-
-## Troubleshooting
-
-### PostgreSQL Connection Issues
-
-```bash
-docker compose -f docker/docker-compose.yml ps postgres
-docker compose -f docker/docker-compose.yml logs postgres
-psql -h localhost -U analyst -d market_analyst -c "SELECT 1;"
-```
-
-### API Key Issues
-
-- **Anthropic**: Ensure your key starts with `sk-ant-`
-- **Tavily**: Ensure your key starts with `tvly-`
-
----
-
-## License
-
-MIT
+The refreshed articles pin older repository snapshots. Updating their commit links is a separate publication step after this change is reviewed and committed.

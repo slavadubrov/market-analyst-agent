@@ -24,6 +24,12 @@ class FakeRedis:
         self.group_created = False
         self.acks: list[str] = []
 
+    def xautoclaim(self, *args, **kwargs):
+        return ["0-0", [], []]
+
+    def xpending_range(self, *args):
+        return []
+
     # XADD
     def xadd(self, _stream: str, fields: dict[str, Any]) -> str:
         msg_id = f"{self.next_id}-0"

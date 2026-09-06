@@ -192,7 +192,8 @@ def test_get_encrypted_serializer_handles_missing_optional_dep(monkeypatch):
         return real_import(name, *args, **kwargs)
 
     monkeypatch.setattr(builtins, "__import__", fake_import)
-    assert encryption.get_encrypted_serializer() is None
+    with pytest.raises(ValueError, match="serializer is unavailable"):
+        encryption.get_encrypted_serializer()
 
 
 def test_get_encrypted_serializer_round_trips(monkeypatch):
@@ -235,6 +236,8 @@ def test_evaluator_node_default_fails_on_llm_error(mocker):
     )
 
     state = mocker.MagicMock(spec=AgentState)
+    state.model_settings = {}
+    state.evidence = []
     state.draft_report = DraftReport(
         ticker="NVDA",
         title="Test",
@@ -261,6 +264,8 @@ def test_evaluator_returns_structured_verdict(mocker):
     )
 
     state = mocker.MagicMock(spec=AgentState)
+    state.model_settings = {}
+    state.evidence = []
     state.draft_report = DraftReport(
         ticker="NVDA",
         title="Test",

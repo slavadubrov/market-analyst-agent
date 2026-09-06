@@ -5,12 +5,14 @@ from market_analyst.llm import get_chat_model, get_structured_model
 
 
 def test_openai_is_used_when_its_key_is_available(mocker):
-    mocker.patch.dict("os.environ", {"OPENAI_API_KEY": "test", "MARKET_ANALYST_MODEL": "claude-haiku"}, clear=True)
+    mocker.patch.dict("os.environ", {"OPENAI_API_KEY": "test", "MARKET_ANALYST_MODEL": "haiku"}, clear=True)
     chat_openai = mocker.patch("market_analyst.llm.ChatOpenAI")
 
     get_chat_model()
 
-    chat_openai.assert_called_once_with(model="gpt-5.6-luna", timeout=None, use_responses_api=True)
+    chat_openai.assert_called_once_with(
+        model="gpt-5.6-luna", timeout=90, max_tokens=4096, max_retries=0, use_responses_api=True, include=["reasoning.encrypted_content"], store=False
+    )
 
 
 def test_anthropic_can_be_selected_explicitly(mocker):
@@ -30,8 +32,10 @@ def test_anthropic_can_be_selected_explicitly(mocker):
     chat_anthropic.assert_called_once_with(
         model_name="claude-haiku",
         temperature=0.3,
-        timeout=None,
+        timeout=90,
+        max_tokens_to_sample=4096,
         stop=None,
+        max_retries=0,
     )
 
 

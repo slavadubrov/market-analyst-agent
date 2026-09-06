@@ -13,6 +13,8 @@ Document memory provides namespace organization for different types of content:
 """
 
 import json
+import os
+import tempfile
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
@@ -97,7 +99,15 @@ class DocumentMemory:
 
         # Write to file
         filepath.parent.mkdir(parents=True, exist_ok=True)
-        filepath.write_text(json.dumps(doc, indent=2))
+        with tempfile.NamedTemporaryFile(mode="w", dir=filepath.parent, delete=False, encoding="utf-8") as file:
+            temporary = Path(file.name)
+            try:
+                json.dump(doc, file, indent=2)
+                file.flush()
+                os.fsync(file.fileno())
+                temporary.replace(filepath)
+            finally:
+                temporary.unlink(missing_ok=True)
 
         return filepath
 
@@ -143,6 +153,8 @@ class DocumentMemory:
         if namespace not in self.namespaces:
             return []
 
+        if "/" in pattern or "\\" in pattern or ".." in pattern:
+            raise ValueError("Document pattern must stay inside its namespace")
         namespace_dir = self.base_path / namespace
         if not namespace_dir.exists():
             return []

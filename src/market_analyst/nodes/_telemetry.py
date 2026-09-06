@@ -53,7 +53,7 @@ def node_callbacks(
     Picks the model up from the same env var the node uses, so the span
     attribute ``gen_ai.request.model`` always matches the actual model called.
     """
-    provider, model = resolve_model()
+    provider, model = resolve_model(config=config)
     return make_callbacks(
         agent_name=f"{AGENT_NS}.{node_name}",
         workflow_name=workflow_name,

@@ -12,6 +12,7 @@ article — but for the reference stack a plain directory is fine.
 
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 from pathlib import Path
@@ -25,7 +26,10 @@ _SAFE_ID = re.compile(r"[^A-Za-z0-9._-]")
 
 
 def _sanitize(thread_id: str) -> str:
-    return _SAFE_ID.sub("_", thread_id) or "unknown"
+    safe = _SAFE_ID.sub("_", thread_id)
+    if safe in {"", ".", ".."} or safe != thread_id or len(safe) > 100:
+        return "thread-" + hashlib.sha256(thread_id.encode()).hexdigest()
+    return safe
 
 
 def workspace_path_for(thread_id: str, root: Path | None = None) -> Path:

@@ -11,6 +11,7 @@ from langchain_core.runnables import RunnableConfig
 
 from market_analyst.llm import get_structured_model
 from market_analyst.nodes._telemetry import node_callbacks
+from market_analyst.runtime.intervention import raise_if_intervention
 from market_analyst.schemas import AgentState, DraftReport
 
 REPORTER_SYSTEM_PROMPT = """You are a senior investment analyst writing a research report.
@@ -47,7 +48,13 @@ def reporter_node(state: AgentState, config: RunnableConfig | None = None) -> di
     Returns:
         Updated state with draft_report
     """
-    structured_llm = get_structured_model(DraftReport, temperature=0.3)
+    if state.error:
+        return {"error": state.error}
+    config = {
+        **(config or {}),
+        "configurable": {**(config or {}).get("configurable", {}), **({"model_settings": state.model_settings} if state.model_settings else {})},
+    }
+    structured_llm = get_structured_model(DraftReport, temperature=0.3, config=config)
 
     # Compile research findings
     research_summary = ""
@@ -99,6 +106,7 @@ Generate a complete DraftReport with your analysis and recommendation."""
         }
 
     except Exception as e:
+        raise_if_intervention(e)
         print(f"\n❌ Report generation failed: {str(e)}")
         return {
             "error": f"Report generation failed: {str(e)}",

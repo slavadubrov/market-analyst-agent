@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 
 from market_analyst.llm import get_structured_model
 from market_analyst.nodes._telemetry import node_callbacks
+from market_analyst.runtime.intervention import raise_if_intervention
 from market_analyst.schemas import AgentState, ReWOOPlanStep
 
 REWOO_PLANNER_PROMPT = """You are a research analyst creating an efficient data gathering plan.
@@ -44,7 +45,7 @@ Be efficient - this is for a QUICK snapshot, not deep research."""
 class ReWOOPlanOutput(BaseModel):
     """Structured output for ReWOO planner."""
 
-    steps: list[ReWOOPlanStep] = Field(description="Planned tool calls with variables")
+    steps: list[ReWOOPlanStep] = Field(description="Planned tool calls with variables", min_length=1, max_length=20)
 
 
 def rewoo_planner_node(state: AgentState, config: RunnableConfig | None = None) -> dict:
@@ -60,7 +61,11 @@ def rewoo_planner_node(state: AgentState, config: RunnableConfig | None = None) 
     Returns:
         Updated state with rewoo_plan
     """
-    structured_llm = get_structured_model(ReWOOPlanOutput)
+    config = {
+        **(config or {}),
+        "configurable": {**(config or {}).get("configurable", {}), **({"model_settings": state.model_settings} if state.model_settings else {})},
+    }
+    structured_llm = get_structured_model(ReWOOPlanOutput, config=config)
 
     ticker = state.research_data.ticker if state.research_data else "UNKNOWN"
 
@@ -70,8 +75,12 @@ def rewoo_planner_node(state: AgentState, config: RunnableConfig | None = None) 
         user_messages = [m for m in state.messages if hasattr(m, "type") and m.type == "human"]
     query = user_messages[-1].content if user_messages else f"Quick analysis of {ticker}"
 
+    from market_analyst.tools.registry import tool_registry
+
+    available = tool_registry((config or {}).get("configurable", {}).get("tools"))
+    tool_contracts = "\n".join(f"{tool.name}: {tool.description}\n{tool.args}" for tool in available.values())
     messages = [
-        SystemMessage(content=REWOO_PLANNER_PROMPT),
+        SystemMessage(content=REWOO_PLANNER_PROMPT + "\nOnly these configured tools may be used (overrides the examples above):\n" + tool_contracts),
         HumanMessage(
             content=f"""Create a ReWOO plan for this request: "{query}"
 
@@ -105,6 +114,7 @@ Output a list of tool calls with:
         }
 
     except Exception as e:
+        raise_if_intervention(e)
         print(f"\n❌ ReWOO planning failed: {e}")
         return {
             "error": f"ReWOO planning failed: {e}",

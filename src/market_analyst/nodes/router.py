@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 
 from market_analyst.llm import get_structured_model
 from market_analyst.nodes._telemetry import node_callbacks
+from market_analyst.runtime.intervention import raise_if_intervention
 from market_analyst.schemas import AgentState, ExecutionMode, ResearchData
 
 ROUTER_SYSTEM_PROMPT = """You are an intent classifier for a stock analysis agent.
@@ -75,7 +76,11 @@ def router_node(state: AgentState, config: RunnableConfig | None = None) -> dict
             "research_data": ResearchData(ticker=ticker),
         }
 
-    structured_llm = get_structured_model(RouterOutput)
+    config = {
+        **(config or {}),
+        "configurable": {**(config or {}).get("configurable", {}), **({"model_settings": state.model_settings} if state.model_settings else {})},
+    }
+    structured_llm = get_structured_model(RouterOutput, config=config)
 
     # Get the user's query
     user_messages = [m for m in state.messages if isinstance(m, HumanMessage)]
@@ -114,6 +119,7 @@ def router_node(state: AgentState, config: RunnableConfig | None = None) -> dict
         }
 
     except Exception as e:
+        raise_if_intervention(e)
         print(f"\n⚠️  Router failed, defaulting to deep research: {e}")
         return {
             "execution_mode": ExecutionMode.DEEP_RESEARCH,
